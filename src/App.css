@@ -1,0 +1,251 @@
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+.app canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* ───── HUD ───── */
+
+.hud {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: calc(12px + var(--safe-top)) 16px 0;
+  pointer-events: none;
+}
+
+.hud-score {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.hud-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hud-value {
+  font-family: var(--display);
+  font-size: 30px;
+  margin-top: 4px;
+  text-shadow: 0 2px 12px rgba(63, 169, 245, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-weapon {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.hud-weapon i {
+  width: 14px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.hud-weapon i.on {
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
+}
+
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hearts {
+  display: flex;
+  gap: 3px;
+}
+
+.heart-icon {
+  width: 22px;
+  height: 22px;
+  fill: var(--pink);
+  filter: drop-shadow(0 0 6px rgba(255, 77, 141, 0.6));
+}
+
+.icon-btn {
+  pointer-events: auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(12, 18, 44, 0.6);
+  cursor: pointer;
+}
+
+.pause-icon {
+  width: 12px;
+  height: 14px;
+  border-left: 4px solid var(--ink);
+  border-right: 4px solid var(--ink);
+}
+
+/* ───── Экраны ───── */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+  background: rgba(5, 8, 22, 0.35);
+  animation: fade 0.25s ease-out;
+}
+
+.card {
+  width: min(360px, 100%);
+  padding: 28px 22px 24px;
+  border-radius: 24px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.logo {
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0 8px 18px rgba(63, 169, 245, 0.5));
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 38px;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #ffffff 0%, #9fd3ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.title.small {
+  font-size: 30px;
+}
+
+.subtitle {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.score-big {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 4px 24px rgba(255, 210, 63, 0.4);
+}
+
+.best {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.record {
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 210, 63, 0.15);
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 14px;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 16px;
+  border: 0;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn.primary {
+  font-family: var(--display);
+  font-weight: 400;
+  color: #2a1600;
+  background: linear-gradient(180deg, var(--gold), var(--orange));
+  box-shadow: 0 8px 24px rgba(255, 159, 28, 0.35), inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+}
+
+.btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+}
+
+.hints {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.hints .star {
+  color: var(--gold);
+}
+
+.hints .heart {
+  color: var(--pink);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.6;
+  }
+}
