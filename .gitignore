@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code: личные заметки
+CLAUDE.local.md
+
+# сборка в один файл
+dist-single
