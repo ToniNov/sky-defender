@@ -89,6 +89,18 @@
   cursor: pointer;
 }
 
+.sound-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.corner {
+  position: absolute;
+  z-index: 5;
+  top: calc(12px + var(--safe-top));
+  right: 16px;
+}
+
 .pause-icon {
   width: 12px;
   height: 14px;

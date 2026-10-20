@@ -124,3 +124,21 @@ export function saveTutorialSeen() {
   }
   if (supports('6.9')) tg?.CloudStorage?.setItem(TUTORIAL_KEY, '1');
 }
+
+// ───── Звук: выключен ли (1 — выключен, 2 — включён, 0 — не задано) ─────
+
+const SOUND_KEY = 'sound_pref';
+
+export async function loadSoundOff(): Promise<boolean> {
+  return ((await readCloud(SOUND_KEY)) || readLocal(SOUND_KEY)) === 1;
+}
+
+export function saveSoundOff(off: boolean) {
+  const value = off ? '1' : '2';
+  try {
+    localStorage.setItem(SOUND_KEY, value);
+  } catch {
+    /* хранилище недоступно — не страшно */
+  }
+  if (supports('6.9')) tg?.CloudStorage?.setItem(SOUND_KEY, value);
+}

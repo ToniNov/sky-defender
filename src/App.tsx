@@ -1,7 +1,7 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
-import { unlockAudio } from './audio';
+import { music, setSoundEnabled, unlockAudio } from './audio';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
 import {
@@ -9,8 +9,10 @@ import {
   haptic,
   initTelegram,
   loadBest,
+  loadSoundOff,
   loadTutorialSeen,
   saveBest,
+  saveSoundOff,
   saveTutorialSeen,
   tutorialSeenLocal,
   userName,
@@ -28,11 +30,16 @@ export default function App() {
   const [best, setBest] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
   const bestRef = useRef(0);
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
     initTelegram();
+    loadSoundOff().then((off) => {
+      setSoundEnabled(!off);
+      setSoundOn(!off);
+    });
     loadTutorialSeen().then((seen) => {
       if (seen) tutorialSeenRef.current = true;
     });
@@ -50,6 +57,21 @@ export default function App() {
     haptic.impact('medium');
     unlockAudio();
   }, []);
+
+  const toggleSound = useCallback(() => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+    saveSoundOff(!next);
+    unlockAudio(); // кнопка — тоже жест пользователя
+    haptic.impact('light');
+  }, [soundOn]);
+
+  // Музыка играет только во время боя
+  useEffect(() => {
+    if (phase === 'playing') music.start();
+    else music.stop();
+  }, [phase]);
 
   // События из игрового мира → состояние React (HUD) + вибрация
   const events = useMemo<WorldEvents>(
@@ -156,6 +178,7 @@ export default function App() {
                 <Heart key={i} />
               ))}
             </div>
+            <SoundButton on={soundOn} onClick={toggleSound} />
             <button className="icon-btn" onClick={() => setPhase('paused')} aria-label="Пауза">
               <span className="pause-icon" />
             </button>
@@ -167,6 +190,12 @@ export default function App() {
         <div className="tutorial" aria-hidden>
           <span className="tutorial-hand">👆</span>
           <p>Веди пальцем — самолёт летит следом</p>
+        </div>
+      )}
+
+      {phase === 'menu' && (
+        <div className="corner">
+          <SoundButton on={soundOn} onClick={toggleSound} />
         </div>
       )}
 
@@ -234,6 +263,14 @@ function Screen({ children }: { children: ReactNode }) {
     <div className="screen">
       <div className="card">{children}</div>
     </div>
+  );
+}
+
+function SoundButton({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button className="icon-btn" onClick={onClick} aria-label={on ? 'Выключить звук' : 'Включить звук'}>
+      <span className="sound-icon">{on ? '🔊' : '🔇'}</span>
+    </button>
   );
 }
 
