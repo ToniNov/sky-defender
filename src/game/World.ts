@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
 import type { Textures } from './textures';
 
@@ -95,6 +95,49 @@ function removeAt<T extends { s: Container }>(arr: T[], i: number) {
   arr.pop();
 }
 
+/**
+ * Пул спрайтов для частых объектов (пули, искры): вместо создания и уничтожения
+ * Sprite на каждый выстрел спрятанные спрайты переиспользуются — меньше работы
+ * сборщику мусора и меньше подтормаживаний на слабых телефонах.
+ */
+class SpritePool {
+  private free: Sprite[] = [];
+  private texture: Texture;
+  private layer: Container;
+
+  constructor(texture: Texture, layer: Container) {
+    this.texture = texture;
+    this.layer = layer;
+  }
+
+  get(): Sprite {
+    let s = this.free.pop();
+    if (!s) {
+      s = new Sprite(this.texture);
+      s.anchor.set(0.5);
+      this.layer.addChild(s);
+    }
+    s.visible = true;
+    s.alpha = 1;
+    s.rotation = 0;
+    s.scale.set(1);
+    s.tint = 0xffffff;
+    return s;
+  }
+
+  release(s: Sprite) {
+    s.visible = false;
+    this.free.push(s);
+  }
+}
+
+/** Как removeAt, но спрайт не уничтожается, а возвращается в пул. */
+function releaseAt<T extends { s: Sprite }>(arr: T[], i: number, pool: SpritePool) {
+  pool.release(arr[i].s);
+  arr[i] = arr[arr.length - 1];
+  arr.pop();
+}
+
 export class World {
   readonly root = new Container();
   readonly keys = new Set<string>();
@@ -113,6 +156,10 @@ export class World {
   private player = new Container();
   private flame: Sprite;
   private warnText: Text;
+
+  private bulletPool: SpritePool;
+  private enemyBulletPool: SpritePool;
+  private sparkPool: SpritePool;
 
   private stars: Star[] = [];
   private enemies: Enemy[] = [];
@@ -149,6 +196,10 @@ export class World {
       this.playerLayer,
       this.fxLayer,
     );
+
+    this.bulletPool = new SpritePool(textures.bullet, this.bulletLayer);
+    this.enemyBulletPool = new SpritePool(textures.enemyBullet, this.fxLayer);
+    this.sparkPool = new SpritePool(textures.spark, this.fxLayer);
 
     this.warnText = new Text({
       text: 'ВНИМАНИЕ!\nКОРАБЛЬ-МАТКА',
@@ -199,10 +250,13 @@ export class World {
 
   /** Убрать всё с поля (для главного меню). */
   clear() {
-    for (const list of [this.enemies, this.bullets, this.enemyBullets, this.particles, this.powerUps, this.popups]) {
+    for (const e of this.enemies) e.bar?.destroy();
+    for (const list of [this.enemies, this.powerUps, this.popups]) {
       while (list.length) removeAt(list as { s: Container }[], list.length - 1);
     }
-    for (const c of this.fxLayer.removeChildren()) c.destroy();
+    while (this.bullets.length) releaseAt(this.bullets, this.bullets.length - 1, this.bulletPool);
+    while (this.enemyBullets.length) releaseAt(this.enemyBullets, this.enemyBullets.length - 1, this.enemyBulletPool);
+    while (this.particles.length) releaseAt(this.particles, this.particles.length - 1, this.sparkPool);
     this.alive = false;
     this.deathTimer = 0;
     this.cancelBossWarning();
@@ -327,11 +381,9 @@ export class World {
           : [[0, 0], [-12, -150], [12, 150]];
     sfx.shoot();
     for (const [dx, vx] of pattern) {
-      const s = new Sprite(this.tx.bullet);
-      s.anchor.set(0.5);
+      const s = this.bulletPool.get();
       s.position.set(x + dx, y - 30);
       s.rotation = Math.atan2(vx, 760);
-      this.bulletLayer.addChild(s);
       this.bullets.push({ s, vx, vy: -760, r: 6 });
     }
   }
@@ -535,10 +587,8 @@ export class World {
     const angle = this.alive
       ? Math.atan2(this.player.y - y, this.player.x - x) + angleOffset
       : Math.PI / 2 + angleOffset;
-    const s = new Sprite(this.tx.enemyBullet);
-    s.anchor.set(0.5);
+    const s = this.enemyBulletPool.get();
     s.position.set(x, y);
-    this.fxLayer.addChild(s);
     this.enemyBullets.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: 5 });
   }
 
@@ -549,7 +599,7 @@ export class World {
       const b = this.bullets[i];
       b.s.x += b.vx * dt;
       b.s.y += b.vy * dt;
-      if (b.s.y < -30) removeAt(this.bullets, i);
+      if (b.s.y < -30) releaseAt(this.bullets, i, this.bulletPool);
     }
   }
 
@@ -559,7 +609,7 @@ export class World {
       b.s.x += b.vx * dt;
       b.s.y += b.vy * dt;
       const { x, y } = b.s;
-      if (y > this.h + 20 || y < -40 || x < -20 || x > this.w + 20) removeAt(this.enemyBullets, i);
+      if (y > this.h + 20 || y < -40 || x < -20 || x > this.w + 20) releaseAt(this.enemyBullets, i, this.enemyBulletPool);
     }
   }
 
@@ -584,13 +634,11 @@ export class World {
 
   private explode(x: number, y: number, color: number, count: number, speed: number) {
     for (let n = 0; n < count; n++) {
-      const s = new Sprite(this.tx.spark);
-      s.anchor.set(0.5);
+      const s = this.sparkPool.get();
       s.blendMode = 'add';
       s.tint = Math.random() < 0.25 ? 0xffffff : color;
       s.position.set(x, y);
       s.scale.set(rand(0.5, 1.6));
-      this.fxLayer.addChild(s);
       const a = rand(0, Math.PI * 2);
       const v = rand(0.2, 1) * speed;
       const life = rand(0.35, 0.85);
@@ -608,7 +656,7 @@ export class World {
       p.vy *= damp;
       p.life -= dt;
       p.s.alpha = Math.max(0, p.life / p.max);
-      if (p.life <= 0) removeAt(this.particles, i);
+      if (p.life <= 0) releaseAt(this.particles, i, this.sparkPool);
     }
   }
 
@@ -650,7 +698,7 @@ export class World {
       for (const e of this.enemies) {
         if (near(b.s, e.s, b.r + e.r)) {
           const { x, y } = b.s;
-          removeAt(this.bullets, i);
+          releaseAt(this.bullets, i, this.bulletPool);
           this.damageEnemy(e, x, y);
           break;
         }
@@ -663,7 +711,7 @@ export class World {
     // пули врагов → игрок
     for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
       if (vulnerable && near(this.enemyBullets[i].s, this.player, PLAYER_R + 4)) {
-        removeAt(this.enemyBullets, i);
+        releaseAt(this.enemyBullets, i, this.enemyBulletPool);
         this.damagePlayer();
         return;
       }
