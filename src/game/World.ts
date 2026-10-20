@@ -76,6 +76,8 @@ const PLAYER_R = 16;
 const POPUP_LIFE = 0.8; // сек
 const POPUP_RISE = 60; // px/сек
 const POPUP_BONUS_COLOR = 0xffffff;
+const BOSS_WARN_TIME = 2.2; // сек между предупреждением и появлением босса
+const BOSS_WARN_SHAKE = 3; // сила тряски экрана во время предупреждения
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -109,6 +111,7 @@ export class World {
 
   private player = new Container();
   private flame: Sprite;
+  private warnText: Text;
 
   private stars: Star[] = [];
   private enemies: Enemy[] = [];
@@ -132,6 +135,7 @@ export class World {
   private shake = 0;
   private alive = false;
   private deathTimer = 0;
+  private bossWarn = 0;
 
   constructor(textures: Textures, events: WorldEvents) {
     this.tx = textures;
@@ -144,6 +148,21 @@ export class World {
       this.playerLayer,
       this.fxLayer,
     );
+
+    this.warnText = new Text({
+      text: 'ВНИМАНИЕ!\nКОРАБЛЬ-МАТКА',
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 28,
+        fontWeight: '900',
+        align: 'center',
+        fill: 0xff4d6d,
+        stroke: { color: 0x000000, width: 5 },
+      },
+    });
+    this.warnText.anchor.set(0.5);
+    this.warnText.visible = false;
+    this.root.addChild(this.warnText);
 
     for (let i = 0; i < 90; i++) {
       const depth = Math.random();
@@ -185,6 +204,7 @@ export class World {
     for (const c of this.fxLayer.removeChildren()) c.destroy();
     this.alive = false;
     this.deathTimer = 0;
+    this.cancelBossWarning();
     this.player.visible = false;
     this.root.position.set(0, 0);
   }
@@ -252,6 +272,7 @@ export class World {
     this.updatePowerUps(dt);
     this.updateParticles(dt);
     this.updatePopups(dt);
+    this.updateBossWarning(dt);
     this.collide();
 
     if (this.shake > 0) {
@@ -341,8 +362,8 @@ export class World {
   private spawnWave() {
     const t = this.elapsed;
     const bossOnField = this.enemies.some((e) => e.kind === 'mother');
-    if (t > 30 && !bossOnField && Math.random() < 0.06) {
-      this.spawn('mother', this.w / 2);
+    if (t > 30 && !bossOnField && this.bossWarn <= 0 && Math.random() < 0.06) {
+      this.bossWarn = BOSS_WARN_TIME;
     } else if (Math.random() < Math.min(0.45, 0.12 + t / 150)) {
       this.spawn('saucer');
     } else if (t > 8 && Math.random() < 0.25) {
@@ -354,6 +375,30 @@ export class World {
     } else {
       this.spawn('scout');
     }
+  }
+
+  private cancelBossWarning() {
+    this.bossWarn = 0;
+    this.warnText.visible = false;
+  }
+
+  /** Надпись и тряска, затем появляется босс. */
+  private updateBossWarning(dt: number) {
+    if (this.bossWarn <= 0) return;
+    if (!this.alive) {
+      this.cancelBossWarning();
+      return;
+    }
+    this.bossWarn -= dt;
+    if (this.bossWarn <= 0) {
+      this.cancelBossWarning();
+      this.spawn('mother', this.w / 2);
+      return;
+    }
+    this.warnText.visible = true;
+    this.warnText.position.set(this.w / 2, this.h * 0.3);
+    this.warnText.alpha = Math.floor(this.bossWarn * 5) % 2 ? 0.25 : 1;
+    this.shake = Math.max(this.shake, BOSS_WARN_SHAKE);
   }
 
   private spawn(kind: EnemyKind, x?: number, yOffset = 0) {
