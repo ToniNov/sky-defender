@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { Textures } from './textures';
 
 /**
@@ -49,6 +49,10 @@ interface Particle {
   life: number;
   max: number;
 }
+interface Popup {
+  s: Text;
+  life: number;
+}
 interface PowerUp {
   s: Sprite;
   kind: 'gun' | 'life';
@@ -69,6 +73,9 @@ const START_LIVES = 3;
 const MAX_LIVES = 5;
 const MAX_WEAPON = 3;
 const PLAYER_R = 16;
+const POPUP_LIFE = 0.8; // сек
+const POPUP_RISE = 60; // px/сек
+const POPUP_BONUS_COLOR = 0xffffff;
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -109,6 +116,7 @@ export class World {
   private enemyBullets: Bullet[] = [];
   private particles: Particle[] = [];
   private powerUps: PowerUp[] = [];
+  private popups: Popup[] = [];
 
   private w = 0;
   private h = 0;
@@ -171,7 +179,7 @@ export class World {
 
   /** Убрать всё с поля (для главного меню). */
   clear() {
-    for (const list of [this.enemies, this.bullets, this.enemyBullets, this.particles, this.powerUps]) {
+    for (const list of [this.enemies, this.bullets, this.enemyBullets, this.particles, this.powerUps, this.popups]) {
       while (list.length) removeAt(list as { s: Container }[], list.length - 1);
     }
     for (const c of this.fxLayer.removeChildren()) c.destroy();
@@ -243,6 +251,7 @@ export class World {
     this.updateEnemyBullets(dt);
     this.updatePowerUps(dt);
     this.updateParticles(dt);
+    this.updatePopups(dt);
     this.collide();
 
     if (this.shake > 0) {
@@ -463,6 +472,7 @@ export class World {
     this.score += cfg.points;
     this.ev.score(this.score);
     this.ev.kill(e.kind);
+    this.spawnPopup(x, y - e.r, `+${cfg.points}`, cfg.color);
 
     const r = Math.random();
     if (big) this.spawnPowerUp(x, y, this.lives < MAX_LIVES && r < 0.5 ? 'life' : 'gun');
@@ -551,6 +561,35 @@ export class World {
     }
   }
 
+  private spawnPopup(x: number, y: number, text: string, color: number) {
+    const s = new Text({
+      text,
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 20,
+        fontWeight: '800',
+        fill: color,
+        stroke: { color: 0x000000, width: 4 },
+      },
+    });
+    s.anchor.set(0.5);
+    s.position.set(clamp(x, 30, this.w - 30), y);
+    this.fxLayer.addChild(s);
+    this.popups.push({ s, life: POPUP_LIFE });
+  }
+
+  private updatePopups(dt: number) {
+    for (let i = this.popups.length - 1; i >= 0; i--) {
+      const p = this.popups[i];
+      p.life -= dt;
+      p.s.y -= POPUP_RISE * dt;
+      const k = p.life / POPUP_LIFE;
+      p.s.alpha = Math.min(1, k * 2.5);
+      p.s.scale.set(1 + Math.max(0, k - 0.8) * 2); // короткий «выпрыг» в начале
+      if (p.life <= 0) removeAt(this.popups, i);
+    }
+  }
+
   // ───────────── столкновения ─────────────
 
   private collide() {
@@ -601,6 +640,7 @@ export class World {
       }
       this.score += 50;
       this.ev.score(this.score);
+      this.spawnPopup(p.s.x, p.s.y - 20, '+50', POPUP_BONUS_COLOR);
       this.ev.powerUp();
       this.explode(p.s.x, p.s.y, p.kind === 'gun' ? 0xffd23f : 0xff4d8d, 12, 160);
       removeAt(this.powerUps, i);
