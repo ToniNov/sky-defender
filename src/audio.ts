@@ -31,7 +31,8 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let musicBus: GainNode | null = null;
 let noise: AudioBuffer | null = null;
-let enabled = true;
+let sfxOn = true;
+let musicOn = true;
 const lastPlayed = new Map<string, number>();
 
 /** Вызывать из обработчика жеста пользователя (тап по кнопке) — браузеры не разрешают звук раньше. */
@@ -40,10 +41,10 @@ export function unlockAudio() {
     if (!ctx) {
       ctx = new AudioContext();
       master = ctx.createGain();
-      master.gain.value = enabled ? MASTER_VOLUME : 0;
+      master.gain.value = MASTER_VOLUME;
       master.connect(ctx.destination);
       musicBus = ctx.createGain();
-      musicBus.gain.value = MUSIC_VOLUME;
+      musicBus.gain.value = musicOn ? MUSIC_VOLUME : 0;
       musicBus.connect(master);
       noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const data = noise.getChannelData(0);
@@ -55,15 +56,16 @@ export function unlockAudio() {
   }
 }
 
-/** Включить или выключить весь звук (эффекты и музыку). */
-export function setSoundEnabled(on: boolean) {
-  enabled = on;
-  if (master) master.gain.value = on ? MASTER_VOLUME : 0;
+/** Включить или выключить звуковые эффекты и музыку по отдельности. */
+export function setAudioEnabled(sfx: boolean, music: boolean) {
+  sfxOn = sfx;
+  musicOn = music;
+  if (musicBus) musicBus.gain.value = music ? MUSIC_VOLUME : 0;
 }
 
 /** Контекст, если звук разблокирован и звук с таким именем не играл только что. */
 function ready(name: string): { ac: AudioContext; out: GainNode } | null {
-  if (!ctx || !master || ctx.state !== 'running') return null;
+  if (!sfxOn || !ctx || !master || ctx.state !== 'running') return null;
   const now = ctx.currentTime;
   if (now - (lastPlayed.get(name) ?? -1) < MIN_GAP) return null;
   lastPlayed.set(name, now);
@@ -154,7 +156,7 @@ function scheduleMusic() {
   // Ноты, запланированные в прошлом (вкладка тормозила), пропускаем, а не играем кучей
   if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.05;
   while (nextTime < ctx.currentTime + LOOKAHEAD) {
-    if (enabled) playStep(ctx, musicBus, step, nextTime);
+    if (musicOn) playStep(ctx, musicBus, step, nextTime);
     nextTime += STEP;
     step = (step + 1) % LOOP_STEPS;
   }

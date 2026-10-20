@@ -58,12 +58,17 @@ export function initTelegram() {
   }
 }
 
+let hapticOn = true;
+export const setHapticEnabled = (on: boolean) => {
+  hapticOn = on;
+};
+
 export const haptic = {
   impact(style: ImpactStyle) {
-    if (supports('6.1')) tg?.HapticFeedback?.impactOccurred(style);
+    if (hapticOn && supports('6.1')) tg?.HapticFeedback?.impactOccurred(style);
   },
   notify(type: NotificationType) {
-    if (supports('6.1')) tg?.HapticFeedback?.notificationOccurred(type);
+    if (hapticOn && supports('6.1')) tg?.HapticFeedback?.notificationOccurred(type);
   },
 };
 
@@ -125,20 +130,33 @@ export function saveTutorialSeen() {
   if (supports('6.9')) tg?.CloudStorage?.setItem(TUTORIAL_KEY, '1');
 }
 
-// ───── Звук: выключен ли (1 — выключен, 2 — включён, 0 — не задано) ─────
+// ───── Настройки: звук, музыка, вибрация ─────
 
-const SOUND_KEY = 'sound_pref';
-
-export async function loadSoundOff(): Promise<boolean> {
-  return ((await readCloud(SOUND_KEY)) || readLocal(SOUND_KEY)) === 1;
+export interface Settings {
+  sfx: boolean;
+  music: boolean;
+  haptics: boolean;
 }
 
-export function saveSoundOff(off: boolean) {
-  const value = off ? '1' : '2';
+export const DEFAULT_SETTINGS: Settings = { sfx: true, music: true, haptics: true };
+
+const SETTINGS_KEY = 'settings';
+const SETTINGS_SET = 8; // признак «настройки сохранялись» (0 = не задано); биты 0–2 — выключено: эффекты, музыка, вибрация
+
+const encodeSettings = (s: Settings) => SETTINGS_SET | (s.sfx ? 0 : 1) | (s.music ? 0 : 2) | (s.haptics ? 0 : 4);
+
+export async function loadSettings(): Promise<Settings> {
+  const v = (await readCloud(SETTINGS_KEY)) || readLocal(SETTINGS_KEY);
+  if (!v) return DEFAULT_SETTINGS;
+  return { sfx: !(v & 1), music: !(v & 2), haptics: !(v & 4) };
+}
+
+export function saveSettings(s: Settings) {
+  const value = String(encodeSettings(s));
   try {
-    localStorage.setItem(SOUND_KEY, value);
+    localStorage.setItem(SETTINGS_KEY, value);
   } catch {
     /* хранилище недоступно — не страшно */
   }
-  if (supports('6.9')) tg?.CloudStorage?.setItem(SOUND_KEY, value);
+  if (supports('6.9')) tg?.CloudStorage?.setItem(SETTINGS_KEY, value);
 }

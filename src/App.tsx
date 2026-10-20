@@ -1,21 +1,24 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
-import { music, setSoundEnabled, unlockAudio } from './audio';
+import { music, setAudioEnabled, unlockAudio } from './audio';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
 import {
   backButton,
+  DEFAULT_SETTINGS,
   haptic,
   initTelegram,
   loadBest,
-  loadSoundOff,
+  loadSettings,
   loadTutorialSeen,
   saveBest,
-  saveSoundOff,
+  saveSettings,
   saveTutorialSeen,
+  setHapticEnabled,
   tutorialSeenLocal,
   userName,
+  type Settings,
 } from './telegram';
 import './App.css';
 
@@ -30,15 +33,17 @@ export default function App() {
   const [best, setBest] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
-  const [soundOn, setSoundOn] = useState(true);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const bestRef = useRef(0);
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
     initTelegram();
-    loadSoundOff().then((off) => {
-      setSoundEnabled(!off);
-      setSoundOn(!off);
+    loadSettings().then((s) => {
+      setAudioEnabled(s.sfx, s.music);
+      setHapticEnabled(s.haptics);
+      setSettings(s);
     });
     loadTutorialSeen().then((seen) => {
       if (seen) tutorialSeenRef.current = true;
@@ -58,14 +63,21 @@ export default function App() {
     unlockAudio();
   }, []);
 
-  const toggleSound = useCallback(() => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled(next);
-    saveSoundOff(!next);
-    unlockAudio(); // кнопка — тоже жест пользователя
+  const updateSettings = useCallback((next: Settings) => {
+    setSettings(next);
+    setAudioEnabled(next.sfx, next.music);
+    setHapticEnabled(next.haptics);
+    saveSettings(next);
+    unlockAudio(); // переключатель — тоже жест пользователя
     haptic.impact('light');
-  }, [soundOn]);
+  }, []);
+
+  const soundOn = settings.sfx || settings.music;
+  // Быстрая кнопка в бою: выключает или включает и эффекты, и музыку сразу
+  const toggleSound = useCallback(
+    () => updateSettings({ ...settings, sfx: !soundOn, music: !soundOn }),
+    [settings, soundOn, updateSettings],
+  );
 
   // Музыка играет только во время боя
   useEffect(() => {
@@ -124,28 +136,35 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // Esc / P — пауза на компьютере
+  // Esc / P — пауза на компьютере (при открытых настройках Esc закрывает их)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Escape' && e.code !== 'KeyP') return;
+      if (settingsOpen) {
+        if (e.code === 'Escape') setSettingsOpen(false);
+        return;
+      }
       setPhase((p) => (p === 'playing' ? 'paused' : p === 'paused' ? 'playing' : p));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [settingsOpen]);
 
-  // Системная кнопка «Назад» в Telegram: в бою — пауза, на паузе — в меню
+  // Системная кнопка «Назад» в Telegram: закрывает настройки; в бою — пауза, на паузе — в меню
   useEffect(() => {
     const bb = backButton;
-    if (!bb || (phase !== 'playing' && phase !== 'paused')) return;
-    const onBack = () => setPhase((p) => (p === 'playing' ? 'paused' : 'menu'));
+    if (!bb || (phase !== 'playing' && phase !== 'paused' && !settingsOpen)) return;
+    const onBack = () => {
+      if (settingsOpen) setSettingsOpen(false);
+      else setPhase((p) => (p === 'playing' ? 'paused' : 'menu'));
+    };
     bb.show();
     bb.onClick(onBack);
     return () => {
       bb.offClick(onBack);
       bb.hide();
     };
-  }, [phase]);
+  }, [phase, settingsOpen]);
 
   const inGame = phase === 'playing' || phase === 'paused';
 
@@ -193,13 +212,15 @@ export default function App() {
         </div>
       )}
 
-      {phase === 'menu' && (
+      {phase === 'menu' && !settingsOpen && (
         <div className="corner">
-          <SoundButton on={soundOn} onClick={toggleSound} />
+          <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Настройки">
+            <span className="sound-icon">⚙️</span>
+          </button>
         </div>
       )}
 
-      {phase === 'menu' && (
+      {phase === 'menu' && !settingsOpen && (
         <Screen>
           <div className="logo" aria-hidden>
             <PlaneIcon />
@@ -227,12 +248,19 @@ export default function App() {
         </Screen>
       )}
 
-      {phase === 'paused' && (
+      {settingsOpen && (
+        <SettingsScreen settings={settings} onChange={updateSettings} onClose={() => setSettingsOpen(false)} />
+      )}
+
+      {phase === 'paused' && !settingsOpen && (
         <Screen>
           <h2 className="title small">Пауза</h2>
           <p className="score-big">{score}</p>
           <button className="btn primary" onClick={() => setPhase('playing')}>
             Продолжить
+          </button>
+          <button className="btn ghost" onClick={() => setSettingsOpen(true)}>
+            Настройки
           </button>
           <button className="btn ghost" onClick={() => setPhase('menu')}>
             В меню
@@ -263,6 +291,45 @@ function Screen({ children }: { children: ReactNode }) {
     <div className="screen">
       <div className="card">{children}</div>
     </div>
+  );
+}
+
+const SETTING_ROWS: { key: keyof Settings; label: string }[] = [
+  { key: 'sfx', label: 'Звуки' },
+  { key: 'music', label: 'Музыка' },
+  { key: 'haptics', label: 'Вибрация' },
+];
+
+function SettingsScreen({
+  settings,
+  onChange,
+  onClose,
+}: {
+  settings: Settings;
+  onChange: (s: Settings) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Screen>
+      <h2 className="title small">Настройки</h2>
+      <div className="settings">
+        {SETTING_ROWS.map(({ key, label }) => (
+          <div className="setting" key={key}>
+            <span>{label}</span>
+            <button
+              className={`switch${settings[key] ? ' on' : ''}`}
+              role="switch"
+              aria-checked={settings[key]}
+              aria-label={label}
+              onClick={() => onChange({ ...settings, [key]: !settings[key] })}
+            />
+          </div>
+        ))}
+      </div>
+      <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
   );
 }
 
