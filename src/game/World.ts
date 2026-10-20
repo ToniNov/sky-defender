@@ -202,7 +202,7 @@ export class World {
     this.sparkPool = new SpritePool(textures.spark, this.fxLayer);
 
     this.warnText = new Text({
-      text: 'ВНИМАНИЕ!\nКОРАБЛЬ-МАТКА',
+      text: 'ВНИМАНИЕ!\nФЛАГМАН',
       style: {
         fontFamily: 'system-ui, sans-serif',
         fontSize: 28,
