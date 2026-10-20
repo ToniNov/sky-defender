@@ -30,6 +30,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [weapon, setWeapon] = useState(1);
+  const [combo, setCombo] = useState(1);
   const [best, setBest] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
@@ -91,6 +92,7 @@ export default function App() {
       score: setScore,
       lives: setLives,
       weapon: setWeapon,
+      combo: setCombo,
       hit: () => haptic.impact('heavy'),
       kill: (kind) => haptic.impact(kind === 'mother' ? 'heavy' : 'light'),
       powerUp: () => haptic.notify('success'),
@@ -184,7 +186,15 @@ export default function App() {
         <header className="hud">
           <div className="hud-score">
             <span className="hud-label">Очки</span>
-            <span className="hud-value">{score}</span>
+            <span className="hud-value">
+              {score}
+              {combo > 1 && (
+                // key меняется с множителем — значок заново проигрывает анимацию
+                <span key={combo} className="hud-combo" aria-label={`Множитель очков ×${combo}`}>
+                  ×{combo}
+                </span>
+              )}
+            </span>
             <span className="hud-weapon" aria-label={`Пушка: уровень ${weapon}`}>
               {[1, 2, 3].map((n) => (
                 <i key={n} className={n <= weapon ? 'on' : ''} />

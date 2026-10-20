@@ -94,3 +94,9 @@ export const POWER_UP = {
   fallSpeed: 110,
   points: 50,
 } as const;
+
+/** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */
+export const COMBO = {
+  killsPerStep: 5, // столько врагов подряд — множитель +1
+  maxMultiplier: 5,
+} as const;

@@ -33,6 +33,7 @@ export function Game({ phase, session, events }: Props) {
       score: (n) => ev().score(n),
       lives: (n) => ev().lives(n),
       weapon: (n) => ev().weapon(n),
+      combo: (m) => ev().combo(m),
       hit: () => ev().hit(),
       kill: (k) => ev().kill(k),
       powerUp: () => ev().powerUp(),

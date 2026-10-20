@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
-import { BOSS, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS } from './balance';
+import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS } from './balance';
 import type { Textures } from './textures';
 
 /**
@@ -17,6 +17,8 @@ export interface WorldEvents {
   score(n: number): void;
   lives(n: number): void;
   weapon(n: number): void;
+  /** Множитель очков за врагов (1 — комбо нет). */
+  combo(multiplier: number): void;
   hit(): void;
   kill(kind: EnemyKind): void;
   powerUp(): void;
@@ -174,6 +176,7 @@ export class World {
   private score = 0;
   private lives: number = PLAYER.startLives;
   private weapon = 1;
+  private combo = 0; // врагов сбито подряд без урона
   private elapsed = 0;
   private spawnCd = 0;
   private fireCd = 0;
@@ -268,6 +271,7 @@ export class World {
     this.score = 0;
     this.lives = PLAYER.startLives;
     this.weapon = 1;
+    this.combo = 0;
     this.elapsed = 0;
     this.spawnCd = SPAWN.firstDelay;
     this.fireCd = PLAYER.firstShotDelay;
@@ -279,6 +283,7 @@ export class World {
     this.ev.score(0);
     this.ev.lives(this.lives);
     this.ev.weapon(this.weapon);
+    this.ev.combo(1);
   }
 
   /** Перемещение пальцем: самолёт двигается на столько же, на сколько палец. */
@@ -387,6 +392,10 @@ export class World {
     const { x, y } = this.player;
     this.lives--;
     this.ev.lives(this.lives);
+    if (this.combo > 0) {
+      this.combo = 0;
+      this.ev.combo(1);
+    }
     this.ev.hit();
     this.shake = 12;
     sfx.damage();
@@ -572,15 +581,25 @@ export class World {
     removeAt(this.enemies, i);
 
     if (!byPlayer) return;
-    this.score += cfg.points;
+    const mult = this.comboMultiplier();
+    this.combo++;
+    const nextMult = this.comboMultiplier();
+    if (nextMult !== mult) this.ev.combo(nextMult);
+
+    const points = cfg.points * mult;
+    this.score += points;
     this.ev.score(this.score);
     this.ev.kill(e.kind);
-    this.spawnPopup(x, y - e.r, `+${cfg.points}`, color);
+    this.spawnPopup(x, y - e.r, `+${points}`, color);
 
     const r = Math.random();
     if (big) this.spawnPowerUp(x, y, this.lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'gun');
     else if (r < POWER_UP.gunChance) this.spawnPowerUp(x, y, 'gun');
     else if (r < POWER_UP.gunChance + POWER_UP.lifeChance) this.spawnPowerUp(x, y, 'life');
+  }
+
+  private comboMultiplier() {
+    return Math.min(COMBO.maxMultiplier, 1 + Math.floor(this.combo / COMBO.killsPerStep));
   }
 
   private enemyShoot(x: number, y: number, angleOffset: number, speed: number) {

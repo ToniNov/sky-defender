@@ -41,7 +41,7 @@ ROADMAP.md         план развития по версиям — задач�
 ## Архитектура — важно соблюдать
 
 - **Игровая логика живёт в `World.ts` как обычный TS-класс, не в React.** Объекты обновляются напрямую каждый кадр. Не переносить сущности игры (пули, врагов, частицы) в React state/компоненты — будет тормозить.
-- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, hit, kill, powerUp, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
+- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, combo, hit, kill, powerUp, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
 - **Фазы игры** (`menu | playing | paused | over`) хранятся в `App.tsx`. `World.update(dt, mode)` получает `run | idle | frozen`.
 - **Графика:** новый спрайт — добавить имя в `TextureName` и функцию рисования в `makeTextures`. Картинки-файлы, когда появятся, класть в `src/assets/` и грузить через `Assets.load`.
 - **Pixi-классы в JSX** нужно регистрировать через `extend({ ... })`, теги с префиксом `pixi` (`<pixiContainer>`).
