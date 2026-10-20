@@ -28,6 +28,7 @@ src/
   App.tsx          экраны (меню, пауза, game over), HUD, связь с Telegram — React
   App.css          стили интерфейса
   index.css        цветовые токены, safe-area отступы, фон
+  audio.ts         звуковые эффекты (синтез через Web Audio, файлов нет); звук включается из жеста — `unlockAudio()`
   telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, рекорд в CloudStorage
   game/
     Game.tsx       мост React ↔ Pixi: создаёт World, передаёт тики (useTick) и ввод

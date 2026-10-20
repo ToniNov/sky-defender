@@ -1,4 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { sfx } from '../audio';
 import type { Textures } from './textures';
 
 /**
@@ -324,6 +325,7 @@ export class World {
         : this.weapon === 2
           ? [[-9, 0], [9, 0]]
           : [[0, 0], [-12, -150], [12, 150]];
+    sfx.shoot();
     for (const [dx, vx] of pattern) {
       const s = new Sprite(this.tx.bullet);
       s.anchor.set(0.5);
@@ -340,6 +342,7 @@ export class World {
     this.ev.lives(this.lives);
     this.ev.hit();
     this.shake = 12;
+    sfx.damage();
     this.explode(x, y, 0xffb020, 18, 240);
     if (this.weapon > 1) {
       this.weapon--;
@@ -352,6 +355,7 @@ export class World {
       this.explode(x, y, 0xffffff, 20, 200);
       this.shake = 22;
       this.deathTimer = 1.3;
+      sfx.explosion(true);
     } else {
       this.invuln = 1.8;
     }
@@ -498,7 +502,8 @@ export class World {
     e.flash = 0.07;
     this.explode(x, y, 0xffd23f, 4, 120);
     this.drawBar(e);
-    if (e.hp <= 0) this.destroyEnemy(e, true);
+    if (e.hp > 0) sfx.hit();
+    else this.destroyEnemy(e, true);
   }
 
   private destroyEnemy(e: Enemy, byPlayer: boolean) {
@@ -510,6 +515,7 @@ export class World {
     this.explode(x, y, cfg.color, big ? 60 : e.kind === 'saucer' ? 24 : 14, big ? 380 : 230);
     this.explode(x, y, 0xffffff, big ? 20 : 6, big ? 200 : 120);
     if (big) this.shake = 14;
+    sfx.explosion(big);
     e.bar?.destroy();
     removeAt(this.enemies, i);
 
@@ -687,6 +693,7 @@ export class World {
       this.ev.score(this.score);
       this.spawnPopup(p.s.x, p.s.y - 20, '+50', POPUP_BONUS_COLOR);
       this.ev.powerUp();
+      sfx.powerUp();
       this.explode(p.s.x, p.s.y, p.kind === 'gun' ? 0xffd23f : 0xff4d8d, 12, 160);
       removeAt(this.powerUps, i);
     }

@@ -1,6 +1,7 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
+import { unlockAudio } from './audio';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
 import {
@@ -47,6 +48,7 @@ export default function App() {
     setSession((s) => s + 1);
     setPhase('playing');
     haptic.impact('medium');
+    unlockAudio();
   }, []);
 
   // События из игрового мира → состояние React (HUD) + вибрация
