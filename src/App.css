@@ -217,6 +217,13 @@
   color: var(--muted);
 }
 
+.version {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0.6;
+}
+
 .hints .star {
   color: var(--gold);
 }

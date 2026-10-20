@@ -1,5 +1,6 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { version } from '../package.json';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
 import { backButton, haptic, initTelegram, loadBest, saveBest, userName } from './telegram';
@@ -148,6 +149,7 @@ export default function App() {
               <span className="star">★</span> усиливает пушку, <span className="heart">♥</span> даёт жизнь
             </li>
           </ul>
+          <p className="version">v{version}</p>
         </Screen>
       )}
 
