@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
+import { BOSS, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS } from './balance';
 import type { Textures } from './textures';
 
 /**
@@ -64,23 +65,20 @@ interface Star {
   speed: number;
 }
 
-const ENEMY = {
-  scout: { hp: 1, r: 16, points: 10, color: 0x7cf27c },
-  saucer: { hp: 3, r: 24, points: 25, color: 0x7fd8ff },
-  mother: { hp: 18, r: 44, points: 150, color: 0xc77dff },
-} as const;
+const ENEMY_COLOR: Record<EnemyKind, number> = {
+  scout: 0x7cf27c,
+  saucer: 0x7fd8ff,
+  mother: 0xc77dff,
+};
 
-const START_LIVES = 3;
-const MAX_LIVES = 5;
-const MAX_WEAPON = 3;
-const PLAYER_R = 16;
 const POPUP_LIFE = 0.8; // сек
 const POPUP_RISE = 60; // px/сек
 const POPUP_BONUS_COLOR = 0xffffff;
-const BOSS_WARN_TIME = 2.2; // сек между предупреждением и появлением босса
 const BOSS_WARN_SHAKE = 3; // сила тряски экрана во время предупреждения
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+const randIn = ([a, b]: readonly [number, number]) => rand(a, b);
+const difficulty = (elapsed: number) => 1 + elapsed / DIFFICULTY_TIME;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const near = (a: Container, b: Container, d: number) => {
   const dx = a.x - b.x;
@@ -174,7 +172,7 @@ export class World {
   private starsPlaced = false;
 
   private score = 0;
-  private lives = START_LIVES;
+  private lives: number = PLAYER.startLives;
   private weapon = 1;
   private elapsed = 0;
   private spawnCd = 0;
@@ -268,12 +266,12 @@ export class World {
   reset() {
     this.clear();
     this.score = 0;
-    this.lives = START_LIVES;
+    this.lives = PLAYER.startLives;
     this.weapon = 1;
     this.elapsed = 0;
-    this.spawnCd = 1;
-    this.fireCd = 0.3;
-    this.invuln = 1.2;
+    this.spawnCd = SPAWN.firstDelay;
+    this.fireCd = PLAYER.firstShotDelay;
+    this.invuln = PLAYER.startInvuln;
     this.shake = 0;
     this.alive = true;
     this.player.visible = true;
@@ -286,8 +284,8 @@ export class World {
   /** Перемещение пальцем: самолёт двигается на столько же, на сколько палец. */
   dragBy(dx: number, dy: number) {
     if (!this.alive) return;
-    this.player.x += dx * 1.25;
-    this.player.y += dy * 1.25;
+    this.player.x += dx * PLAYER.dragFactor;
+    this.player.y += dy * PLAYER.dragFactor;
     this.clampPlayer();
   }
 
@@ -306,7 +304,7 @@ export class World {
     if (mode === 'idle') return;
 
     this.elapsed += dt;
-    const diff = 1 + this.elapsed / 100; // плавный рост сложности
+    const diff = difficulty(this.elapsed); // плавный рост сложности
 
     if (this.alive) {
       this.updatePlayer(dt);
@@ -314,7 +312,10 @@ export class World {
       if (this.spawnCd <= 0) {
         this.spawnWave();
         const bossOnField = this.enemies.some((e) => e.kind === 'mother');
-        this.spawnCd = Math.max(0.28, 1 - this.elapsed * 0.01) * rand(0.7, 1.3) * (bossOnField ? 1.8 : 1);
+        this.spawnCd =
+          Math.max(SPAWN.minInterval, SPAWN.baseInterval - this.elapsed * SPAWN.intervalDecay) *
+          randIn(SPAWN.jitter) *
+          (bossOnField ? SPAWN.bossSlowdown : 1);
       }
     } else if (this.deathTimer > 0) {
       this.deathTimer -= dt;
@@ -347,7 +348,7 @@ export class World {
 
   private updatePlayer(dt: number) {
     const k = this.keys;
-    const sp = 460 * dt;
+    const sp = PLAYER.keySpeed * dt;
     if (k.has('ArrowLeft') || k.has('KeyA')) this.player.x -= sp;
     if (k.has('ArrowRight') || k.has('KeyD')) this.player.x += sp;
     if (k.has('ArrowUp') || k.has('KeyW')) this.player.y -= sp;
@@ -366,25 +367,19 @@ export class World {
     this.fireCd -= dt;
     if (this.fireCd <= 0) {
       this.fire();
-      this.fireCd = 0.15;
+      this.fireCd = PLAYER.fireInterval;
     }
   }
 
   private fire() {
     const { x, y } = this.player;
-    // [смещение по x, скорость по x]
-    const pattern: [number, number][] =
-      this.weapon === 1
-        ? [[0, 0]]
-        : this.weapon === 2
-          ? [[-9, 0], [9, 0]]
-          : [[0, 0], [-12, -150], [12, 150]];
+    const pattern = WEAPON_PATTERNS[this.weapon];
     sfx.shoot();
     for (const [dx, vx] of pattern) {
       const s = this.bulletPool.get();
       s.position.set(x + dx, y - 30);
-      s.rotation = Math.atan2(vx, 760);
-      this.bullets.push({ s, vx, vy: -760, r: 6 });
+      s.rotation = Math.atan2(vx, PLAYER.bulletSpeed);
+      this.bullets.push({ s, vx, vy: -PLAYER.bulletSpeed, r: PLAYER.bulletR });
     }
   }
 
@@ -409,7 +404,7 @@ export class World {
       this.deathTimer = 1.3;
       sfx.explosion(true);
     } else {
-      this.invuln = 1.8;
+      this.invuln = PLAYER.hitInvuln;
     }
   }
 
@@ -418,11 +413,11 @@ export class World {
   private spawnWave() {
     const t = this.elapsed;
     const bossOnField = this.enemies.some((e) => e.kind === 'mother');
-    if (t > 30 && !bossOnField && this.bossWarn <= 0 && Math.random() < 0.06) {
-      this.bossWarn = BOSS_WARN_TIME;
-    } else if (Math.random() < Math.min(0.45, 0.12 + t / 150)) {
+    if (t > BOSS.after && !bossOnField && this.bossWarn <= 0 && Math.random() < BOSS.chance) {
+      this.bossWarn = BOSS.warnTime;
+    } else if (Math.random() < Math.min(SPAWN.saucerChanceMax, SPAWN.saucerChance + t / SPAWN.saucerChanceTime)) {
       this.spawn('saucer');
-    } else if (t > 8 && Math.random() < 0.25) {
+    } else if (t > SPAWN.wedgeAfter && Math.random() < SPAWN.wedgeChance) {
       // клин из трёх разведчиков
       const x = rand(70, this.w - 70);
       this.spawn('scout', x);
@@ -459,9 +454,10 @@ export class World {
 
   private spawn(kind: EnemyKind, x?: number, yOffset = 0) {
     const cfg = ENEMY[kind];
-    const diff = 1 + this.elapsed / 100;
-    const hp = kind === 'mother' ? cfg.hp + Math.floor(this.elapsed / 30) * 4 : cfg.hp;
-    const amp = kind === 'saucer' ? rand(30, Math.min(90, this.w / 4)) : 0;
+    const { mother, saucer } = ENEMY;
+    const diff = difficulty(this.elapsed);
+    const hp = kind === 'mother' ? mother.hp + Math.floor(this.elapsed / mother.hpGrowthEvery) * mother.hpGrowth : cfg.hp;
+    const amp = kind === 'saucer' ? rand(saucer.amp[0], Math.min(saucer.amp[1], this.w / 4)) : 0;
     let ex = x ?? rand(cfg.r + 10, this.w - cfg.r - 10);
     if (kind === 'saucer') ex = clamp(ex, cfg.r + amp, this.w - cfg.r - amp);
 
@@ -477,11 +473,11 @@ export class World {
       maxHp: hp,
       r: cfg.r,
       vx: 0,
-      vy: kind === 'scout' ? rand(170, 230) * diff : kind === 'saucer' ? rand(80, 110) * diff : 60,
+      vy: kind === 'mother' ? mother.speed : randIn(ENEMY[kind].speed) * diff,
       baseX: ex,
       amp,
       t: rand(0, 6),
-      fireCd: kind === 'mother' ? 1.5 : rand(1.2, 3),
+      fireCd: kind === 'mother' ? mother.firstShot : randIn(ENEMY_FIRST_SHOT),
       flash: 0,
     };
     if (kind === 'mother') {
@@ -511,7 +507,8 @@ export class World {
 
       if (e.kind === 'scout') {
         // разведчики слегка доворачивают на игрока
-        if (this.alive) e.vx = clamp(e.vx + Math.sign(this.player.x - s.x) * 90 * dt, -90, 90);
+        const { turnAccel, maxVx } = ENEMY.scout;
+        if (this.alive) e.vx = clamp(e.vx + Math.sign(this.player.x - s.x) * turnAccel * dt, -maxVx, maxVx);
         s.x += e.vx * dt;
         s.y += e.vy * dt;
         s.rotation = e.vx / 600;
@@ -524,16 +521,18 @@ export class World {
         s.x = this.w / 2 + Math.sin(e.t * 0.7) * (this.w / 2 - 60);
       }
 
-      const shoots = e.kind === 'mother' || (e.kind === 'saucer' && this.elapsed > 15);
+      const shoots = e.kind === 'mother' || (e.kind === 'saucer' && this.elapsed > ENEMY.saucer.shootsAfter);
       if (this.alive && shoots && s.y > 0) {
         e.fireCd -= dt;
         if (e.fireCd <= 0) {
           if (e.kind === 'saucer') {
-            this.enemyShoot(s.x, s.y + 14, 0, 220 + this.elapsed);
-            e.fireCd = rand(2, 3.5) / diff;
+            const { saucer } = ENEMY;
+            this.enemyShoot(s.x, s.y + 14, 0, saucer.bulletSpeed + this.elapsed);
+            e.fireCd = randIn(saucer.fireInterval) / diff;
           } else {
-            for (const a of [-0.35, 0, 0.35]) this.enemyShoot(s.x, s.y + 24, a, 210);
-            e.fireCd = 1.2;
+            const { mother } = ENEMY;
+            for (const a of mother.spread) this.enemyShoot(s.x, s.y + 24, a, mother.bulletSpeed);
+            e.fireCd = mother.fireInterval;
           }
         }
       }
@@ -563,8 +562,9 @@ export class World {
     if (i < 0) return;
     const { x, y } = e.s;
     const cfg = ENEMY[e.kind];
+    const color = ENEMY_COLOR[e.kind];
     const big = e.kind === 'mother';
-    this.explode(x, y, cfg.color, big ? 60 : e.kind === 'saucer' ? 24 : 14, big ? 380 : 230);
+    this.explode(x, y, color, big ? 60 : e.kind === 'saucer' ? 24 : 14, big ? 380 : 230);
     this.explode(x, y, 0xffffff, big ? 20 : 6, big ? 200 : 120);
     if (big) this.shake = 14;
     sfx.explosion(big);
@@ -575,12 +575,12 @@ export class World {
     this.score += cfg.points;
     this.ev.score(this.score);
     this.ev.kill(e.kind);
-    this.spawnPopup(x, y - e.r, `+${cfg.points}`, cfg.color);
+    this.spawnPopup(x, y - e.r, `+${cfg.points}`, color);
 
     const r = Math.random();
-    if (big) this.spawnPowerUp(x, y, this.lives < MAX_LIVES && r < 0.5 ? 'life' : 'gun');
-    else if (r < 0.06) this.spawnPowerUp(x, y, 'gun');
-    else if (r < 0.09) this.spawnPowerUp(x, y, 'life');
+    if (big) this.spawnPowerUp(x, y, this.lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'gun');
+    else if (r < POWER_UP.gunChance) this.spawnPowerUp(x, y, 'gun');
+    else if (r < POWER_UP.gunChance + POWER_UP.lifeChance) this.spawnPowerUp(x, y, 'life');
   }
 
   private enemyShoot(x: number, y: number, angleOffset: number, speed: number) {
@@ -589,7 +589,7 @@ export class World {
       : Math.PI / 2 + angleOffset;
     const s = this.enemyBulletPool.get();
     s.position.set(x, y);
-    this.enemyBullets.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: 5 });
+    this.enemyBullets.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: ENEMY_BULLET_R });
   }
 
   // ───────────── снаряды, бонусы, частицы ─────────────
@@ -625,7 +625,7 @@ export class World {
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const p = this.powerUps[i];
       p.t += dt;
-      p.s.y += 110 * dt;
+      p.s.y += POWER_UP.fallSpeed * dt;
       p.s.scale.set(1 + Math.sin(p.t * 7) * 0.12);
       if (p.kind === 'gun') p.s.rotation += dt * 2;
       if (p.s.y > this.h + 30) removeAt(this.powerUps, i);
@@ -710,7 +710,7 @@ export class World {
 
     // пули врагов → игрок
     for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-      if (vulnerable && near(this.enemyBullets[i].s, this.player, PLAYER_R + 4)) {
+      if (vulnerable && near(this.enemyBullets[i].s, this.player, PLAYER.r + 4)) {
         releaseAt(this.enemyBullets, i, this.enemyBulletPool);
         this.damagePlayer();
         return;
@@ -719,7 +719,7 @@ export class World {
 
     // таран
     for (const e of this.enemies) {
-      if (vulnerable && near(e.s, this.player, e.r * 0.8 + PLAYER_R)) {
+      if (vulnerable && near(e.s, this.player, e.r * 0.8 + PLAYER.r)) {
         if (e.kind !== 'mother') this.destroyEnemy(e, false);
         this.damagePlayer();
         return;
@@ -729,17 +729,17 @@ export class World {
     // бонусы
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const p = this.powerUps[i];
-      if (!near(p.s, this.player, 32)) continue;
+      if (!near(p.s, this.player, PLAYER.pickupR)) continue;
       if (p.kind === 'gun') {
-        this.weapon = Math.min(MAX_WEAPON, this.weapon + 1);
+        this.weapon = Math.min(PLAYER.maxWeapon, this.weapon + 1);
         this.ev.weapon(this.weapon);
       } else {
-        this.lives = Math.min(MAX_LIVES, this.lives + 1);
+        this.lives = Math.min(PLAYER.maxLives, this.lives + 1);
         this.ev.lives(this.lives);
       }
-      this.score += 50;
+      this.score += POWER_UP.points;
       this.ev.score(this.score);
-      this.spawnPopup(p.s.x, p.s.y - 20, '+50', POPUP_BONUS_COLOR);
+      this.spawnPopup(p.s.x, p.s.y - 20, `+${POWER_UP.points}`, POPUP_BONUS_COLOR);
       this.ev.powerUp();
       sfx.powerUp();
       this.explode(p.s.x, p.s.y, p.kind === 'gun' ? 0xffd23f : 0xff4d8d, 12, 160);
