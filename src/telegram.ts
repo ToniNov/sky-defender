@@ -72,21 +72,22 @@ export const backButton = supports('6.1') ? tg?.BackButton : undefined;
 // ───── Рекорд: localStorage + облако Telegram (синхронизируется между устройствами) ─────
 
 const BEST_KEY = 'best_score';
+const TUTORIAL_KEY = 'tutorial_seen';
 
-function readLocal(): number {
+function readLocal(key = BEST_KEY): number {
   try {
-    return Number(localStorage.getItem(BEST_KEY)) || 0;
+    return Number(localStorage.getItem(key)) || 0;
   } catch {
     return 0;
   }
 }
 
-function readCloud(): Promise<number> {
+function readCloud(key = BEST_KEY): Promise<number> {
   const cloud = supports('6.9') ? tg?.CloudStorage : undefined;
   if (!cloud) return Promise.resolve(0);
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(0), 2000);
-    cloud.getItem(BEST_KEY, (err, value) => {
+    cloud.getItem(key, (err, value) => {
       clearTimeout(timer);
       resolve(err ? 0 : Number(value) || 0);
     });
@@ -104,4 +105,22 @@ export function saveBest(score: number) {
     /* хранилище недоступно — не страшно */
   }
   if (supports('6.9')) tg?.CloudStorage?.setItem(BEST_KEY, String(score));
+}
+
+// ───── Обучение: показываем один раз ─────
+
+/** Быстрая проверка без ожидания облака. */
+export const tutorialSeenLocal = () => readLocal(TUTORIAL_KEY) === 1;
+
+export async function loadTutorialSeen(): Promise<boolean> {
+  return tutorialSeenLocal() || (await readCloud(TUTORIAL_KEY)) === 1;
+}
+
+export function saveTutorialSeen() {
+  try {
+    localStorage.setItem(TUTORIAL_KEY, '1');
+  } catch {
+    /* хранилище недоступно — не страшно */
+  }
+  if (supports('6.9')) tg?.CloudStorage?.setItem(TUTORIAL_KEY, '1');
 }

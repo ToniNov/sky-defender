@@ -3,8 +3,20 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { version } from '../package.json';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
-import { backButton, haptic, initTelegram, loadBest, saveBest, userName } from './telegram';
+import {
+  backButton,
+  haptic,
+  initTelegram,
+  loadBest,
+  loadTutorialSeen,
+  saveBest,
+  saveTutorialSeen,
+  tutorialSeenLocal,
+  userName,
+} from './telegram';
 import './App.css';
+
+const TUTORIAL_MAX_MS = 8000;
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('menu');
@@ -14,10 +26,15 @@ export default function App() {
   const [weapon, setWeapon] = useState(1);
   const [best, setBest] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
   const bestRef = useRef(0);
+  const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
     initTelegram();
+    loadTutorialSeen().then((seen) => {
+      if (seen) tutorialSeenRef.current = true;
+    });
     loadBest().then((b) => {
       bestRef.current = Math.max(bestRef.current, b);
       setBest(bestRef.current);
@@ -26,6 +43,7 @@ export default function App() {
 
   const start = useCallback(() => {
     setNewRecord(false);
+    setTutorial(!tutorialSeenRef.current);
     setSession((s) => s + 1);
     setPhase('playing');
     haptic.impact('medium');
@@ -54,6 +72,24 @@ export default function App() {
     }),
     [],
   );
+
+  // Подсказка «веди пальцем»: пропадает при первом касании (или через пару секунд) и больше не показывается
+  useEffect(() => {
+    if (!tutorial || phase !== 'playing') return;
+    const done = () => {
+      tutorialSeenRef.current = true;
+      saveTutorialSeen();
+      setTutorial(false);
+    };
+    const timer = setTimeout(done, TUTORIAL_MAX_MS);
+    window.addEventListener('pointerdown', done);
+    window.addEventListener('keydown', done);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', done);
+      window.removeEventListener('keydown', done);
+    };
+  }, [tutorial, phase]);
 
   // Пауза, если свернули Telegram / переключили вкладку
   useEffect(() => {
@@ -123,6 +159,13 @@ export default function App() {
             </button>
           </div>
         </header>
+      )}
+
+      {tutorial && phase === 'playing' && (
+        <div className="tutorial" aria-hidden>
+          <span className="tutorial-hand">👆</span>
+          <p>Веди пальцем — самолёт летит следом</p>
+        </div>
       )}
 
       {phase === 'menu' && (
