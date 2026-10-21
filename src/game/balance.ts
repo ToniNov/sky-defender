@@ -38,6 +38,8 @@ export const ENEMY = {
     speed: [170, 230], // × сложность
     turnAccel: 90, // доворот на игрока
     maxVx: 90,
+    snakeAmp: 90, // змейка: размах (не больше четверти экрана)
+    snakeWavelength: 70, // змейка: чем больше, тем плавнее изгибы
   },
   saucer: {
     hp: 3,
@@ -116,29 +118,22 @@ export const ENEMY = {
 export const ENEMY_FIRST_SHOT: readonly [number, number] = [1.2, 3];
 export const ENEMY_BULLET_R = 5;
 
-export const SPAWN = {
-  firstDelay: 1,
-  baseInterval: 1, // интервал в начале партии
-  intervalDecay: 0.01, // на столько интервал короче за каждую секунду
-  minInterval: 0.28,
-  jitter: [0.7, 1.3], // случайный множитель интервала
-  bossSlowdown: 1.8, // пока босс на поле, враги появляются реже
-  saucerChance: 0.12, // + время / saucerChanceTime, но не больше saucerChanceMax
-  saucerChanceTime: 150,
-  saucerChanceMax: 0.45,
-  splitterAfter: 12, // новые враги появляются с этой секунды партии…
-  splitterChance: 0.12, // …с таким шансом на волне
-  kamikazeAfter: 20,
-  kamikazeChance: 0.12,
-  shielderAfter: 40,
-  shielderChance: 0.08,
-  wedgeAfter: 8, // клин из трёх разведчиков — с этой секунды
-  wedgeChance: 0.25,
+/** Волны: построения вылетают по очереди, волна кончается, когда поле опустело. Состав волн — в waves.ts. */
+export const WAVES = {
+  introTime: 1.6, // баннер «ВОЛНА N» до первого построения
+  formations: 4, // построений в первой волне
+  formationsGrowth: 0.7, // + за каждую следующую волну
+  maxFormations: 14,
+  gap: 1.7, // пауза между построениями в первой волне
+  gapDecay: 0.1, // на столько короче с каждой волной
+  minGap: 0.6,
+  jitter: [0.8, 1.2], // случайный множитель паузы
+  maxClearWait: 5, // после последнего построения ждём пустого поля, но не дольше
+  bossEvery: 5, // каждая такая волна — с боссом
+  bossEscortInterval: 4, // пока босс на поле, подлетает сопровождение
 } as const;
 
 export const BOSS = {
-  after: 30, // босс может появиться с этой секунды
-  chance: 0.06, // шанс на каждой волне
   warnTime: 2.2, // между предупреждением и появлением
 } as const;
 

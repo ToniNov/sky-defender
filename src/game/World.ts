@@ -1,8 +1,9 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
-import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS, type PowerUpKind } from './balance';
+import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, WAVES, WEAPON_PATTERNS, type PowerUpKind } from './balance';
 import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
+import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves';
 
 /**
  * Игровой мир. Обычный TypeScript-класс без React:
@@ -45,6 +46,7 @@ interface Enemy {
   timer: number;
   stopY: number;
   shots: number; // босс: сколько пуль осталось в очереди
+  inFormation: boolean; // разведчик в строю не доворачивает на игрока, иначе строй слипается
 }
 type BossAttack = 'fan' | 'burst' | 'homing';
 interface Missile {
@@ -117,6 +119,8 @@ const DROP_KINDS = Object.keys(POWER_UP.drops) as PowerUpKind[];
 const MAGNET_BLINK_TIME = 2; // последние секунды магнита кольцо мигает
 const BOMB_FLASH = 0.35; // сек, белая вспышка на весь экран
 const BOMB_SHAKE = 18;
+
+const WAVE_TEXT_COLOR = 0xffe066;
 
 const POPUP_LIFE = 0.8; // сек
 const POPUP_RISE = 60; // px/сек
@@ -206,6 +210,7 @@ export class World {
   private magnetRing: Sprite;
   private bombFlash = new Graphics();
   private warnText: Text;
+  private waveText: Text;
 
   private bulletPool: SpritePool;
   private enemyBulletPool: SpritePool;
@@ -229,7 +234,10 @@ export class World {
   private weapon = 1;
   private combo = 0; // врагов сбито подряд без урона
   private elapsed = 0;
-  private spawnCd = 0;
+  private wave = 0;
+  private waveQueue: FormationName[] = []; // построения, которые ещё не вылетели
+  private waveTimer = 0; // до следующего построения (или конец ожидания пустого поля)
+  private waveBanner = 0; // сколько ещё показывать «ВОЛНА N»
   private fireCd = 0;
   private invuln = 0;
   private shake = 0;
@@ -272,6 +280,20 @@ export class World {
     this.warnText.anchor.set(0.5);
     this.warnText.visible = false;
     this.root.addChild(this.warnText);
+
+    this.waveText = new Text({
+      text: '',
+      style: {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 34,
+        fontWeight: '900',
+        fill: WAVE_TEXT_COLOR,
+        stroke: { color: 0x000000, width: 6 },
+      },
+    });
+    this.waveText.anchor.set(0.5);
+    this.waveText.visible = false;
+    this.root.addChild(this.waveText);
 
     for (let i = 0; i < 90; i++) {
       const depth = Math.random();
@@ -330,6 +352,8 @@ export class World {
     this.magnetRing.visible = false;
     this.flash = 0;
     this.bombFlash.visible = false;
+    this.waveBanner = 0;
+    this.waveText.visible = false;
     this.cancelBossWarning();
     this.player.visible = false;
     this.root.position.set(0, 0);
@@ -343,7 +367,6 @@ export class World {
     this.weapon = 1;
     this.combo = 0;
     this.elapsed = 0;
-    this.spawnCd = SPAWN.firstDelay;
     this.fireCd = PLAYER.firstShotDelay;
     this.invuln = PLAYER.startInvuln;
     this.shake = 0;
@@ -356,6 +379,7 @@ export class World {
     this.ev.lives(this.lives);
     this.ev.weapon(this.weapon);
     this.ev.combo(1);
+    this.startWave(1);
   }
 
   /** Перемещение пальцем: самолёт двигается на столько же, на сколько палец. */
@@ -385,15 +409,7 @@ export class World {
 
     if (this.alive) {
       this.updatePlayer(dt);
-      this.spawnCd -= dt;
-      if (this.spawnCd <= 0 && this.autoSpawn) {
-        this.spawnWave();
-        const bossOnField = this.enemies.some((e) => e.kind === 'mother');
-        this.spawnCd =
-          Math.max(SPAWN.minInterval, SPAWN.baseInterval - this.elapsed * SPAWN.intervalDecay) *
-          randIn(SPAWN.jitter) *
-          (bossOnField ? SPAWN.bossSlowdown : 1);
-      }
+      if (this.autoSpawn) this.updateWaves(dt);
     } else if (this.deathTimer > 0) {
       this.deathTimer -= dt;
       if (this.deathTimer <= 0) this.ev.gameOver(this.score);
@@ -407,6 +423,7 @@ export class World {
     this.updateParticles(dt);
     this.updatePopups(dt);
     this.updateBossWarning(dt);
+    this.updateWaveBanner(dt);
     this.updateBombFlash(dt);
     this.collide();
 
@@ -516,27 +533,110 @@ export class World {
 
   // ───────────── враги ─────────────
 
-  private spawnWave() {
-    const t = this.elapsed;
+  // ───────────── волны ─────────────
+
+  private startWave(n: number) {
+    this.wave = n;
+    this.waveQueue = planWave(n);
+    this.waveTimer = WAVES.introTime;
+    this.waveBanner = WAVES.introTime;
+    this.waveText.text = `ВОЛНА ${n}`;
+  }
+
+  /** Построения вылетают по очереди; когда все вылетели и поле опустело — следующая волна. */
+  private updateWaves(dt: number) {
+    this.waveTimer -= dt;
+    if (this.waveQueue.length) {
+      if (this.waveTimer > 0) return;
+      this.spawnFormation(this.waveQueue.shift()!);
+      this.waveTimer = this.waveQueue.length
+        ? Math.max(WAVES.minGap, WAVES.gap - (this.wave - 1) * WAVES.gapDecay) * randIn(WAVES.jitter)
+        : WAVES.maxClearWait;
+      return;
+    }
+
     const bossOnField = this.enemies.some((e) => e.kind === 'mother');
-    if (t > BOSS.after && !bossOnField && this.bossWarn <= 0 && Math.random() < BOSS.chance) {
-      this.bossWarn = BOSS.warnTime;
-    } else if (Math.random() < Math.min(SPAWN.saucerChanceMax, SPAWN.saucerChance + t / SPAWN.saucerChanceTime)) {
-      this.spawn('saucer');
-    } else if (t > SPAWN.shielderAfter && Math.random() < SPAWN.shielderChance) {
-      this.spawn('shielder');
-    } else if (t > SPAWN.kamikazeAfter && Math.random() < SPAWN.kamikazeChance) {
-      this.spawn('kamikaze');
-    } else if (t > SPAWN.splitterAfter && Math.random() < SPAWN.splitterChance) {
-      this.spawn('splitter');
-    } else if (t > SPAWN.wedgeAfter && Math.random() < SPAWN.wedgeChance) {
-      // клин из трёх разведчиков
-      const x = rand(70, this.w - 70);
-      this.spawn('scout', x);
-      this.spawn('scout', x - 32, 34);
-      this.spawn('scout', x + 32, 34);
-    } else {
-      this.spawn('scout');
+    if (bossOnField || this.bossWarn > 0) {
+      // волна босса кончается только с его смертью, а пока подлетает сопровождение
+      if (bossOnField && this.waveTimer <= 0) {
+        this.spawnFormation(BOSS_ESCORTS[Math.floor(Math.random() * BOSS_ESCORTS.length)]);
+        this.waveTimer = WAVES.bossEscortInterval;
+      }
+      return;
+    }
+
+    if (this.enemies.length === 0 || this.waveTimer <= 0) this.startWave(this.wave + 1);
+  }
+
+  private updateWaveBanner(dt: number) {
+    if (this.waveBanner <= 0) return;
+    this.waveBanner -= dt;
+    const k = this.waveBanner / WAVES.introTime;
+    this.waveText.visible = this.waveBanner > 0;
+    this.waveText.position.set(this.w / 2, this.h * 0.4);
+    this.waveText.alpha = Math.min(1, k * 3); // в конце плавно гаснет
+    this.waveText.scale.set(1 + Math.max(0, k - 0.85) * 2); // и «выпрыгивает» в начале
+  }
+
+  /** Расставить построение над верхним краем экрана. */
+  private spawnFormation(f: FormationName) {
+    const w = this.w;
+    // разведчики в построении летят с общей скоростью, иначе строй рассыпается сразу
+    const scoutVy = randIn(ENEMY.scout.speed) * difficulty(this.elapsed);
+    const scout = (x: number, yOffset = 0) => {
+      const e = this.spawn('scout', x, yOffset);
+      e.vy = scoutVy;
+      e.inFormation = true;
+      return e;
+    };
+    switch (f) {
+      case 'boss':
+        this.bossWarn = BOSS.warnTime;
+        break;
+      case 'scout':
+        this.spawn('scout');
+        break;
+      case 'line':
+        for (let i = 0; i < 5; i++) scout((w * (i + 1)) / 6);
+        break;
+      case 'wedge': {
+        const x = rand(90, w - 90);
+        scout(x);
+        for (const side of [-1, 1]) {
+          scout(x + side * 32, 34);
+          scout(x + side * 64, 68);
+        }
+        break;
+      }
+      case 'snake': {
+        // все с одной скоростью и по одной кривой — получается змейка
+        const amp = Math.min(ENEMY.scout.snakeAmp, w / 4);
+        const x = rand(amp + 20, w - amp - 20);
+        for (let i = 0; i < 6; i++) {
+          const e = scout(x, i * 44);
+          e.baseX = x;
+          e.amp = amp;
+        }
+        break;
+      }
+      case 'saucers':
+        this.spawn('saucer', w / 3);
+        this.spawn('saucer', (2 * w) / 3);
+        break;
+      case 'splitters':
+        this.spawn('splitter', w * 0.3);
+        this.spawn('splitter', w * 0.7, 40);
+        break;
+      case 'kamikazes':
+        for (let i = 0; i < 3; i++) this.spawn('kamikaze', (w * (i + 1)) / 4, i * 30);
+        break;
+      case 'shielderGuard': {
+        const x = rand(80, w - 80);
+        this.spawn('shielder', x);
+        scout(clamp(x - 50, 20, w - 20), 30);
+        scout(clamp(x + 50, 20, w - 20), 30);
+        break;
+      }
     }
   }
 
@@ -595,6 +695,7 @@ export class World {
       timer: 0,
       stopY: kind === 'kamikaze' ? randIn(ENEMY.kamikaze.stopAt) * this.h : 0,
       shots: 0,
+      inFormation: false,
     };
     if (kind === 'mother') {
       e.bar = new Graphics();
@@ -622,10 +723,16 @@ export class World {
       const s = e.s;
       e.t += dt;
 
-      if (e.kind === 'scout') {
+      if (e.kind === 'scout' && e.amp > 0) {
+        // разведчик из змейки: x зависит от высоты, поэтому вся змейка идёт по одной кривой
+        const { snakeWavelength } = ENEMY.scout;
+        s.y += e.vy * dt;
+        s.x = e.baseX + Math.sin(s.y / snakeWavelength) * e.amp;
+        s.rotation = -Math.cos(s.y / snakeWavelength) * (e.amp / snakeWavelength) * 0.5;
+      } else if (e.kind === 'scout') {
         // разведчики слегка доворачивают на игрока
         const { turnAccel, maxVx } = ENEMY.scout;
-        if (this.alive) e.vx = clamp(e.vx + Math.sign(this.player.x - s.x) * turnAccel * dt, -maxVx, maxVx);
+        if (this.alive && !e.inFormation) e.vx = clamp(e.vx + Math.sign(this.player.x - s.x) * turnAccel * dt, -maxVx, maxVx);
         s.x += e.vx * dt;
         s.y += e.vy * dt;
         s.rotation = e.vx / 600;
@@ -1113,6 +1220,7 @@ export class World {
         h: this.h,
         alive: this.alive,
         score: this.score,
+        wave: this.wave,
         lives: this.lives,
         weapon: this.weapon,
         combo: this.comboMultiplier(),
@@ -1141,6 +1249,14 @@ export class World {
       spawnPowerUp: (kind, x, y) => {
         if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
         this.spawnPowerUp(x, y, kind as PowerUpKind);
+      },
+      startWave: (n) => {
+        this.autoSpawn = true;
+        this.startWave(n);
+      },
+      spawnFormation: (name) => {
+        if (!(name in FORMATIONS) && name !== 'boss') throw new Error(`Нет такого построения: ${name}`);
+        this.spawnFormation(name as FormationName);
       },
       setCheats: (cheats) => {
         this.cheats = { ...this.cheats, ...cheats };

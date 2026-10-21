@@ -21,6 +21,7 @@ export interface DebugSnapshot {
   h: number;
   alive: boolean;
   score: number;
+  wave: number;
   lives: number;
   weapon: number;
   combo: number;
@@ -38,6 +39,10 @@ export interface WorldDebug {
   snapshot(): DebugSnapshot;
   /** Включить или выключить случайное появление врагов. */
   setAutoSpawn(on: boolean): void;
+  /** Сразу начать волну n (и включить спавн). */
+  startWave(n: number): void;
+  /** Выпустить одно построение из waves.ts. */
+  spawnFormation(name: string): void;
   spawnEnemy(kind: string, x: number, y: number): void;
   spawnPowerUp(kind: string, x: number, y: number): void;
   /** Самонаводящийся снаряд босса, летит вниз. */
