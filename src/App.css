@@ -41,6 +41,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+.hud-combo {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-size: 18px;
+  color: var(--orange);
+  text-shadow: 0 0 10px rgba(255, 159, 28, 0.6);
+  animation: combo-pop 0.35s ease-out;
+}
+
+@keyframes combo-pop {
+  0% {
+    transform: scale(1.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .hud-weapon {
   display: flex;
   gap: 4px;

@@ -15,8 +15,17 @@ interface Props {
   events: WorldEvents;
 }
 
+/**
+ * В dev-режиме StrictMode создаёт Pixi-приложение дважды, и первое уничтожается
+ * без рендерера — сцену строим только для живого приложения.
+ */
+export function Game(props: Props) {
+  const { app } = useApplication();
+  return app.renderer ? <GameScene {...props} /> : null;
+}
+
 /** Мост между React и игровым миром: создаёт World, кормит его тиками и вводом. */
-export function Game({ phase, session, events }: Props) {
+function GameScene({ phase, session, events }: Props) {
   const { app } = useApplication();
   const containerRef = useRef<Container>(null);
   const phaseRef = useRef(phase);
@@ -33,12 +42,22 @@ export function Game({ phase, session, events }: Props) {
       score: (n) => ev().score(n),
       lives: (n) => ev().lives(n),
       weapon: (n) => ev().weapon(n),
+      combo: (m) => ev().combo(m),
       hit: () => ev().hit(),
       kill: (k) => ev().kill(k),
       powerUp: () => ev().powerUp(),
       gameOver: (s) => ev().gameOver(s),
     });
   }, [app]);
+
+  // В dev-сборке мир доступен e2e-тестам как window.__world (см. debug.ts)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__world = world.debugApi();
+    return () => {
+      delete window.__world;
+    };
+  }, [world]);
 
   // Подключаем мир к сцене и следим за размером экрана
   useEffect(() => {

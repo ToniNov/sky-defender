@@ -28,3 +28,7 @@ CLAUDE.local.md
 
 # сборка в один файл
 dist-single
+
+# e2e-тесты Playwright
+test-results
+playwright-report
