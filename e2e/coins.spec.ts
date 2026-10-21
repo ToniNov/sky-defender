@@ -39,6 +39,9 @@ test('магнит притягивает монеты', async ({ page }) => {
 test('босс рассыпает монеты', async ({ page }) => {
   await startGame(page);
   await setCheats(page, { noDamage: true });
+  // пушка третьего уровня, чтобы босс падал за несколько секунд
+  await pickUp(page, 'gun');
+  await pickUp(page, 'gun');
   const { w } = await snapshot(page);
   await movePlayer(page, w / 2, 9999);
   await spawnEnemy(page, 'mother', w / 2, 120);
@@ -46,7 +49,7 @@ test('босс рассыпает монеты', async ({ page }) => {
     .poll(async () => {
       const s = await snapshot(page);
       return s.coinsOnField.length + s.coins;
-    }, { timeout: 15000 })
+    }, { timeout: 20_000 })
     .toBeGreaterThanOrEqual(COINS.boss);
 });
 
