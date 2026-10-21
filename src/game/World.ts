@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
-import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS } from './balance';
+import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS, type PowerUpKind } from './balance';
 import type { Textures } from './textures';
 
 /**
@@ -59,7 +59,7 @@ interface Popup {
 }
 interface PowerUp {
   s: Sprite;
-  kind: 'gun' | 'life';
+  kind: PowerUpKind;
   t: number;
 }
 interface Star {
@@ -72,6 +72,24 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   saucer: 0x7fd8ff,
   mother: 0xc77dff,
 };
+
+const POWER_UP_COLOR: Record<PowerUpKind, number> = {
+  gun: 0xffd23f,
+  life: 0xff4d8d,
+  shield: 0x5fd4ff,
+  magnet: 0xff6b6b,
+  bomb: 0xff9f1c,
+};
+/** Подпись при подборе: для пушки и жизни хватает HUD, остальные стоит назвать. */
+const POWER_UP_LABEL: Partial<Record<PowerUpKind, string>> = {
+  shield: 'ЩИТ',
+  magnet: 'МАГНИТ',
+  bomb: 'БОМБА',
+};
+const DROP_KINDS = Object.keys(POWER_UP.drops) as PowerUpKind[];
+const MAGNET_BLINK_TIME = 2; // последние секунды магнита кольцо мигает
+const BOMB_FLASH = 0.35; // сек, белая вспышка на весь экран
+const BOMB_SHAKE = 18;
 
 const POPUP_LIFE = 0.8; // сек
 const POPUP_RISE = 60; // px/сек
@@ -155,6 +173,9 @@ export class World {
 
   private player = new Container();
   private flame: Sprite;
+  private shieldBubble: Sprite;
+  private magnetRing: Sprite;
+  private bombFlash = new Graphics();
   private warnText: Text;
 
   private bulletPool: SpritePool;
@@ -185,6 +206,9 @@ export class World {
   private alive = false;
   private deathTimer = 0;
   private bossWarn = 0;
+  private shield = false;
+  private magnet = 0; // сколько ещё действует магнит
+  private flash = 0; // остаток вспышки от бомбы
 
   constructor(textures: Textures, events: WorldEvents) {
     this.tx = textures;
@@ -232,9 +256,18 @@ export class World {
     this.flame.y = 24;
     const body = new Sprite(textures.plane);
     body.anchor.set(0.5);
-    this.player.addChild(this.flame, body);
+    this.shieldBubble = new Sprite(textures.shieldBubble);
+    this.shieldBubble.anchor.set(0.5);
+    this.magnetRing = new Sprite(textures.magnetRing);
+    this.magnetRing.anchor.set(0.5);
+    this.shieldBubble.visible = false;
+    this.magnetRing.visible = false;
+    this.player.addChild(this.flame, body, this.magnetRing, this.shieldBubble);
     this.player.visible = false;
     this.playerLayer.addChild(this.player);
+
+    this.bombFlash.visible = false;
+    this.root.addChild(this.bombFlash);
   }
 
   // ───────────── управление снаружи ─────────────
@@ -260,6 +293,11 @@ export class World {
     while (this.particles.length) releaseAt(this.particles, this.particles.length - 1, this.sparkPool);
     this.alive = false;
     this.deathTimer = 0;
+    this.setShield(false);
+    this.magnet = 0;
+    this.magnetRing.visible = false;
+    this.flash = 0;
+    this.bombFlash.visible = false;
     this.cancelBossWarning();
     this.player.visible = false;
     this.root.position.set(0, 0);
@@ -334,6 +372,7 @@ export class World {
     this.updateParticles(dt);
     this.updatePopups(dt);
     this.updateBossWarning(dt);
+    this.updateBombFlash(dt);
     this.collide();
 
     if (this.shake > 0) {
@@ -362,6 +401,14 @@ export class World {
 
     this.flame.scale.set(rand(0.85, 1.1), rand(0.7, 1.35));
 
+    if (this.magnet > 0) {
+      this.magnet -= dt;
+      this.magnetRing.rotation += dt * 1.5;
+      this.magnetRing.visible = this.magnet > MAGNET_BLINK_TIME || Math.floor(this.magnet * 8) % 2 === 0;
+      if (this.magnet <= 0) this.magnetRing.visible = false;
+    }
+    if (this.shield) this.shieldBubble.scale.set(1 + Math.sin(this.elapsed * 6) * 0.04);
+
     if (this.invuln > 0) {
       this.invuln -= dt;
       this.player.alpha = Math.floor(this.invuln * 12) % 2 ? 0.3 : 1;
@@ -388,8 +435,22 @@ export class World {
     }
   }
 
+  private setShield(on: boolean) {
+    this.shield = on;
+    this.shieldBubble.visible = on;
+  }
+
   private damagePlayer() {
     const { x, y } = this.player;
+    if (this.shield) {
+      // щит принимает удар: жизнь, пушка и комбо остаются
+      this.setShield(false);
+      this.invuln = POWER_UP.shieldBreakInvuln;
+      this.shake = 6;
+      sfx.shieldBreak();
+      this.explode(x, y, POWER_UP_COLOR.shield, 20, 260);
+      return;
+    }
     this.lives--;
     this.ev.lives(this.lives);
     if (this.combo > 0) {
@@ -592,10 +653,18 @@ export class World {
     this.ev.kill(e.kind);
     this.spawnPopup(x, y - e.r, `+${points}`, color);
 
-    const r = Math.random();
-    if (big) this.spawnPowerUp(x, y, this.lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'gun');
-    else if (r < POWER_UP.gunChance) this.spawnPowerUp(x, y, 'gun');
-    else if (r < POWER_UP.gunChance + POWER_UP.lifeChance) this.spawnPowerUp(x, y, 'life');
+    if (big) {
+      this.spawnPowerUp(x, y, this.lives < PLAYER.maxLives && Math.random() < POWER_UP.bossLifeChance ? 'life' : 'gun');
+      return;
+    }
+    let r = Math.random();
+    for (const kind of DROP_KINDS) {
+      r -= POWER_UP.drops[kind];
+      if (r < 0) {
+        this.spawnPowerUp(x, y, kind);
+        break;
+      }
+    }
   }
 
   private comboMultiplier() {
@@ -632,7 +701,7 @@ export class World {
     }
   }
 
-  private spawnPowerUp(x: number, y: number, kind: 'gun' | 'life') {
+  private spawnPowerUp(x: number, y: number, kind: PowerUpKind) {
     const s = new Sprite(this.tx[kind]);
     s.anchor.set(0.5);
     s.position.set(x, y);
@@ -644,11 +713,52 @@ export class World {
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const p = this.powerUps[i];
       p.t += dt;
-      p.s.y += POWER_UP.fallSpeed * dt;
+      if (this.magnet > 0 && this.alive) {
+        // магнит тянет бонусы к самолёту
+        const dx = this.player.x - p.s.x;
+        const dy = this.player.y - p.s.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const step = Math.min(d, POWER_UP.magnetSpeed * dt);
+        p.s.x += (dx / d) * step;
+        p.s.y += (dy / d) * step;
+      } else {
+        p.s.y += POWER_UP.fallSpeed * dt;
+      }
       p.s.scale.set(1 + Math.sin(p.t * 7) * 0.12);
       if (p.kind === 'gun') p.s.rotation += dt * 2;
       if (p.s.y > this.h + 30) removeAt(this.powerUps, i);
     }
+  }
+
+  /** Бомба: сбивает всех врагов на экране, ранит босса и стирает вражеские пули. */
+  private detonateBomb() {
+    for (const e of [...this.enemies]) {
+      if (e.s.y < -e.r) continue; // ещё не вылетел на экран
+      if (e.kind === 'mother') {
+        e.hp -= POWER_UP.bombBossDamage;
+        e.flash = 0.2;
+        this.drawBar(e);
+        if (e.hp <= 0) this.destroyEnemy(e, true);
+      } else {
+        this.destroyEnemy(e, true);
+      }
+    }
+    for (const b of this.enemyBullets) this.explode(b.s.x, b.s.y, 0xff3d6e, 2, 80);
+    while (this.enemyBullets.length) releaseAt(this.enemyBullets, this.enemyBullets.length - 1, this.enemyBulletPool);
+    this.flash = BOMB_FLASH;
+    this.shake = Math.max(this.shake, BOMB_SHAKE);
+    sfx.explosion(true);
+  }
+
+  private updateBombFlash(dt: number) {
+    if (this.flash <= 0) return;
+    this.flash -= dt;
+    // рисуем с запасом за края, чтобы тряска не открывала полосы
+    this.bombFlash
+      .clear()
+      .rect(-40, -40, this.w + 80, this.h + 80)
+      .fill({ color: 0xffffff, alpha: Math.max(0, this.flash / BOMB_FLASH) * 0.6 });
+    this.bombFlash.visible = this.flash > 0;
   }
 
   private explode(x: number, y: number, color: number, count: number, speed: number) {
@@ -749,20 +859,31 @@ export class World {
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const p = this.powerUps[i];
       if (!near(p.s, this.player, PLAYER.pickupR)) continue;
-      if (p.kind === 'gun') {
-        this.weapon = Math.min(PLAYER.maxWeapon, this.weapon + 1);
-        this.ev.weapon(this.weapon);
-      } else {
-        this.lives = Math.min(PLAYER.maxLives, this.lives + 1);
-        this.ev.lives(this.lives);
-      }
+      const { x, y } = p.s;
+      const kind = p.kind;
+      // убираем до применения: бомба может породить новые бонусы
+      removeAt(this.powerUps, i);
       this.score += POWER_UP.points;
       this.ev.score(this.score);
-      this.spawnPopup(p.s.x, p.s.y - 20, `+${POWER_UP.points}`, POPUP_BONUS_COLOR);
+      if (kind === 'gun') {
+        this.weapon = Math.min(PLAYER.maxWeapon, this.weapon + 1);
+        this.ev.weapon(this.weapon);
+      } else if (kind === 'life') {
+        this.lives = Math.min(PLAYER.maxLives, this.lives + 1);
+        this.ev.lives(this.lives);
+      } else if (kind === 'shield') {
+        this.setShield(true);
+      } else if (kind === 'magnet') {
+        this.magnet = POWER_UP.magnetTime;
+        this.magnetRing.visible = true;
+      } else {
+        this.detonateBomb();
+      }
+      const label = POWER_UP_LABEL[kind];
+      this.spawnPopup(x, y - 20, label ? `${label} +${POWER_UP.points}` : `+${POWER_UP.points}`, POPUP_BONUS_COLOR);
       this.ev.powerUp();
       sfx.powerUp();
-      this.explode(p.s.x, p.s.y, p.kind === 'gun' ? 0xffd23f : 0xff4d8d, 12, 160);
-      removeAt(this.powerUps, i);
+      this.explode(x, y, POWER_UP_COLOR[kind], 12, 160);
     }
   }
 }

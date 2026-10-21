@@ -16,7 +16,12 @@ export type TextureName =
   | 'spark'
   | 'star'
   | 'gun'
-  | 'life';
+  | 'life'
+  | 'shield'
+  | 'magnet'
+  | 'bomb'
+  | 'shieldBubble'
+  | 'magnetRing';
 
 export type Textures = Record<TextureName, Texture>;
 
@@ -117,6 +122,51 @@ export function makeTextures(renderer: Renderer): Textures {
       g.circle(14, 14, 14).fill({ color: 0xff4d8d, alpha: 0.25 });
       g.moveTo(14, 22).bezierCurveTo(2, 14, 6, 3, 14, 9.5).bezierCurveTo(22, 3, 26, 14, 14, 22).fill(0xff4d8d);
       g.ellipse(10, 11, 2, 1.4).fill({ color: 0xffffff, alpha: 0.8 });
+    }),
+
+    // Бонус: щит
+    shield: bake((g) => {
+      g.circle(14, 14, 14).fill({ color: 0x5fd4ff, alpha: 0.25 });
+      g.poly([14, 4, 23, 7.5, 22, 15, 14, 24, 6, 15, 5, 7.5]).fill(0x5fd4ff);
+      g.poly([14, 7, 19.5, 9.5, 19, 14.5, 14, 20.5]).fill({ color: 0xffffff, alpha: 0.6 });
+    }),
+
+    // Бонус: магнит (подкова)
+    magnet: bake((g) => {
+      g.circle(14, 14, 14).fill({ color: 0xff6b6b, alpha: 0.25 });
+      g.arc(14, 13, 6.5, Math.PI, 0, true).stroke({ width: 5, color: 0xff6b6b });
+      g.moveTo(7.5, 13).lineTo(7.5, 7).stroke({ width: 5, color: 0xff6b6b });
+      g.moveTo(20.5, 13).lineTo(20.5, 7).stroke({ width: 5, color: 0xff6b6b });
+      g.rect(5, 4, 5, 3.5).fill(0xeef6ff);
+      g.rect(18, 4, 5, 3.5).fill(0xeef6ff);
+    }),
+
+    // Бонус: бомба
+    bomb: bake((g) => {
+      g.circle(14, 14, 14).fill({ color: 0xff9f1c, alpha: 0.25 });
+      g.circle(13, 16, 8).fill(0x2a2f45);
+      g.circle(10.5, 13.5, 2.2).fill({ color: 0xffffff, alpha: 0.5 });
+      g.moveTo(18, 10).quadraticCurveTo(21, 6, 23, 6).stroke({ width: 1.8, color: 0xd9c08a });
+      g.circle(23, 5.5, 2.6).fill(0xff9f1c);
+      g.circle(23, 5.5, 1.2).fill(0xffe066);
+    }),
+
+    // Пузырь щита вокруг самолёта
+    shieldBubble: bake((g) => {
+      g.circle(40, 40, 38).fill({ color: 0x5fd4ff, alpha: 0.12 });
+      g.circle(40, 40, 38).stroke({ width: 2.5, color: 0x9be7ff, alpha: 0.85 });
+      g.arc(40, 40, 32, -2.5, -1.6).stroke({ width: 3, color: 0xffffff, alpha: 0.6 });
+    }),
+
+    // Пунктирное кольцо, пока действует магнит
+    magnetRing: bake((g) => {
+      const dashes = 12;
+      for (let i = 0; i < dashes; i++) {
+        const a = (i / dashes) * Math.PI * 2;
+        g.moveTo(46 + Math.cos(a) * 44, 46 + Math.sin(a) * 44);
+        g.arc(46, 46, 44, a, a + (Math.PI / dashes) * 0.9);
+        g.stroke({ width: 2.5, color: 0xff6b6b, alpha: 0.75 });
+      }
     }),
   };
 }

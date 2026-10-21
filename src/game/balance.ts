@@ -88,12 +88,24 @@ export const BOSS = {
 } as const;
 
 export const POWER_UP = {
-  gunChance: 0.06, // выпадение с обычного врага
-  lifeChance: 0.03,
+  // шанс выпадения каждого бонуса с обычного врага (в сумме — шанс любого)
+  drops: {
+    gun: 0.06,
+    life: 0.03,
+    shield: 0.03,
+    magnet: 0.025,
+    bomb: 0.015,
+  },
   bossLifeChance: 0.5, // с босса всегда бонус: жизнь (если не максимум) или пушка
   fallSpeed: 110,
   points: 50,
+  shieldBreakInvuln: 1, // неуязвимость после того, как щит принял удар
+  magnetTime: 10, // сколько действует магнит
+  magnetSpeed: 560, // с такой скоростью бонусы летят к игроку
+  bombBossDamage: 6, // урон бомбы боссу (остальных врагов на экране сбивает сразу)
 } as const;
+
+export type PowerUpKind = keyof typeof POWER_UP.drops;
 
 /** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */
 export const COMBO = {
