@@ -10,7 +10,7 @@ import type { Textures } from './textures';
  * запускает мир, передаёт ему ввод и показывает HUD по событиям.
  */
 
-export type EnemyKind = 'scout' | 'saucer' | 'mother';
+export type EnemyKind = 'scout' | 'saucer' | 'mother' | 'kamikaze' | 'shielder' | 'splitter' | 'mini';
 export type UpdateMode = 'run' | 'idle' | 'frozen';
 
 export interface WorldEvents {
@@ -39,6 +39,10 @@ interface Enemy {
   fireCd: number;
   flash: number;
   bar?: Graphics;
+  /** Камикадзе: 0 — заходит на позицию, 1 — целится, 2 — таранит. */
+  phase: number;
+  timer: number;
+  stopY: number;
 }
 interface Bullet {
   s: Sprite;
@@ -71,7 +75,13 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   scout: 0x7cf27c,
   saucer: 0x7fd8ff,
   mother: 0xc77dff,
+  kamikaze: 0xff5a3c,
+  shielder: 0xf2c14e,
+  splitter: 0xff8fd8,
+  mini: 0xff8fd8,
 };
+const KAMIKAZE_AIM_TINT = 0xffff66; // мигание перед тараном
+const DEFLECT_COLOR = 0xdfe6f2; // искры от щита щитоносца
 
 const POWER_UP_COLOR: Record<PowerUpKind, number> = {
   gun: 0xffd23f,
@@ -487,6 +497,12 @@ export class World {
       this.bossWarn = BOSS.warnTime;
     } else if (Math.random() < Math.min(SPAWN.saucerChanceMax, SPAWN.saucerChance + t / SPAWN.saucerChanceTime)) {
       this.spawn('saucer');
+    } else if (t > SPAWN.shielderAfter && Math.random() < SPAWN.shielderChance) {
+      this.spawn('shielder');
+    } else if (t > SPAWN.kamikazeAfter && Math.random() < SPAWN.kamikazeChance) {
+      this.spawn('kamikaze');
+    } else if (t > SPAWN.splitterAfter && Math.random() < SPAWN.splitterChance) {
+      this.spawn('splitter');
     } else if (t > SPAWN.wedgeAfter && Math.random() < SPAWN.wedgeChance) {
       // клин из трёх разведчиков
       const x = rand(70, this.w - 70);
@@ -522,7 +538,7 @@ export class World {
     this.shake = Math.max(this.shake, BOSS_WARN_SHAKE);
   }
 
-  private spawn(kind: EnemyKind, x?: number, yOffset = 0) {
+  private spawn(kind: EnemyKind, x?: number, yOffset = 0): Enemy {
     const cfg = ENEMY[kind];
     const { mother, saucer } = ENEMY;
     const diff = difficulty(this.elapsed);
@@ -549,6 +565,9 @@ export class World {
       t: rand(0, 6),
       fireCd: kind === 'mother' ? mother.firstShot : randIn(ENEMY_FIRST_SHOT),
       flash: 0,
+      phase: 0,
+      timer: 0,
+      stopY: kind === 'kamikaze' ? randIn(ENEMY.kamikaze.stopAt) * this.h : 0,
     };
     if (kind === 'mother') {
       e.bar = new Graphics();
@@ -556,6 +575,7 @@ export class World {
       this.drawBar(e);
     }
     this.enemies.push(e);
+    return e;
   }
 
   private drawBar(e: Enemy) {
@@ -585,10 +605,27 @@ export class World {
       } else if (e.kind === 'saucer') {
         s.y += e.vy * dt;
         s.x = e.baseX + Math.sin(e.t * 2.2) * e.amp;
-      } else {
+      } else if (e.kind === 'mother') {
         const targetY = this.h * 0.12 + 40;
         if (s.y < targetY) s.y += e.vy * dt;
         s.x = this.w / 2 + Math.sin(e.t * 0.7) * (this.w / 2 - 60);
+      } else if (e.kind === 'kamikaze') {
+        this.updateKamikaze(e, dt);
+      } else if (e.kind === 'shielder') {
+        // медленно сдвигается под игрока, прикрываясь щитом
+        s.y += e.vy * dt;
+        if (this.alive) {
+          const step = ENEMY.shielder.trackSpeed * dt;
+          s.x += clamp(this.player.x - s.x, -step, step);
+        }
+      } else if (e.kind === 'splitter') {
+        s.y += e.vy * dt;
+      } else {
+        // осколок сплиттера: разлетается в стороны и отскакивает от краёв
+        e.vx *= Math.exp(-1.5 * dt);
+        s.x += e.vx * dt;
+        s.y += e.vy * dt;
+        if ((s.x < e.r && e.vx < 0) || (s.x > this.w - e.r && e.vx > 0)) e.vx = -e.vx;
       }
 
       const shoots = e.kind === 'mother' || (e.kind === 'saucer' && this.elapsed > ENEMY.saucer.shootsAfter);
@@ -609,6 +646,7 @@ export class World {
 
       e.flash = Math.max(0, e.flash - dt);
       s.tint = e.flash > 0 ? 0xff7777 : 0xffffff;
+      if (e.kind === 'kamikaze' && e.phase === 1 && Math.floor(e.timer * 12) % 2) s.tint = KAMIKAZE_AIM_TINT;
       e.bar?.position.set(s.x, s.y - e.r - 10);
 
       if (s.y > this.h + e.r + 20 || s.x < -120 || s.x > this.w + 120) {
@@ -616,6 +654,40 @@ export class World {
         removeAt(this.enemies, i);
       }
     }
+  }
+
+  private updateKamikaze(e: Enemy, dt: number) {
+    const s = e.s;
+    const cfg = ENEMY.kamikaze;
+    if (e.phase === 0) {
+      s.y += e.vy * dt;
+      if (s.y >= e.stopY) {
+        e.phase = 1;
+        e.timer = cfg.aimTime;
+      }
+    } else if (e.phase === 1) {
+      // зависает и доворачивает нос на игрока — время увернуться
+      e.timer -= dt;
+      const dx = this.alive ? this.player.x - s.x : 0;
+      const dy = this.alive ? this.player.y - s.y : 1;
+      s.rotation = Math.atan2(dy, dx) - Math.PI / 2;
+      if (e.timer <= 0) {
+        e.phase = 2;
+        const d = Math.hypot(dx, dy) || 1;
+        e.vx = dx / d;
+        e.vy = dy / d;
+        e.timer = 0; // дальше timer — текущая скорость
+      }
+    } else {
+      e.timer = Math.min(cfg.dashMaxSpeed, e.timer + cfg.dashAccel * dt);
+      s.x += e.vx * e.timer * dt;
+      s.y += e.vy * e.timer * dt;
+    }
+  }
+
+  private deflect(x: number, y: number) {
+    this.explode(x, y, DEFLECT_COLOR, 3, 140);
+    sfx.deflect();
   }
 
   private damageEnemy(e: Enemy, x: number, y: number) {
@@ -634,7 +706,7 @@ export class World {
     const cfg = ENEMY[e.kind];
     const color = ENEMY_COLOR[e.kind];
     const big = e.kind === 'mother';
-    this.explode(x, y, color, big ? 60 : e.kind === 'saucer' ? 24 : 14, big ? 380 : 230);
+    this.explode(x, y, color, big ? 60 : e.r >= 20 ? 24 : 14, big ? 380 : 230);
     this.explode(x, y, 0xffffff, big ? 20 : 6, big ? 200 : 120);
     if (big) this.shake = 14;
     sfx.explosion(big);
@@ -642,6 +714,14 @@ export class World {
     removeAt(this.enemies, i);
 
     if (!byPlayer) return;
+    if (e.kind === 'splitter') {
+      for (const side of [-1, 1]) {
+        const m = this.spawn('mini');
+        m.s.position.set(x + side * 10, y);
+        m.vx = side * ENEMY.mini.splitVx;
+      }
+    }
+
     const mult = this.comboMultiplier();
     this.combo++;
     const nextMult = this.comboMultiplier();
@@ -743,6 +823,8 @@ export class World {
         this.destroyEnemy(e, true);
       }
     }
+    // осколки сплиттеров, появившиеся от взрыва
+    for (const e of [...this.enemies]) if (e.kind === 'mini') this.destroyEnemy(e, true);
     for (const b of this.enemyBullets) this.explode(b.s.x, b.s.y, 0xff3d6e, 2, 80);
     while (this.enemyBullets.length) releaseAt(this.enemyBullets, this.enemyBullets.length - 1, this.enemyBulletPool);
     this.flash = BOMB_FLASH;
@@ -828,7 +910,10 @@ export class World {
         if (near(b.s, e.s, b.r + e.r)) {
           const { x, y } = b.s;
           releaseAt(this.bullets, i, this.bulletPool);
-          this.damageEnemy(e, x, y);
+          // щитоносец неуязвим снизу по центру — бить надо по краям
+          const blocked = e.kind === 'shielder' && y > e.s.y && Math.abs(x - e.s.x) < ENEMY.shielder.plateHalf;
+          if (blocked) this.deflect(x, y);
+          else this.damageEnemy(e, x, y);
           break;
         }
       }

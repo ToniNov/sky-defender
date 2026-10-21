@@ -122,6 +122,7 @@ export const sfx = {
     tone('powerUp-2', 'sine', 659, 659, 0.09, 0.09, 0.07);
     tone('powerUp-3', 'sine', 784, 784, 0.14, 0.09, 0.14);
   },
+  deflect: () => tone('deflect', 'square', 1800, 1500, 0.04, 0.02),
   shieldBreak: () => tone('shieldBreak', 'triangle', 1400, 260, 0.25, 0.08),
   damage() {
     tone('damage', 'sawtooth', 190, 40, 0.4, 0.14);

@@ -61,6 +61,38 @@ export const ENEMY = {
     bulletSpeed: 210,
     spread: [-0.35, 0, 0.35], // углы веера, рад
   },
+  kamikaze: {
+    hp: 1,
+    r: 15,
+    points: 20,
+    speed: [130, 160], // скорость захода на позицию
+    stopAt: [0.08, 0.25], // останавливается на этой доле высоты экрана
+    aimTime: 0.7, // целится (мигает), затем таранит
+    dashAccel: 900, // разгон в сторону игрока
+    dashMaxSpeed: 620,
+  },
+  shielder: {
+    hp: 4,
+    r: 26,
+    points: 40,
+    speed: [45, 60], // × сложность
+    trackSpeed: 55, // сдвигается под игрока, но медленнее его
+    plateHalf: 16, // полуширина щита снизу: пули ближе к центру отлетают
+  },
+  splitter: {
+    hp: 3,
+    r: 22,
+    points: 20,
+    speed: [80, 110], // × сложность
+  },
+  mini: {
+    // осколок сплиттера
+    hp: 1,
+    r: 12,
+    points: 10,
+    speed: [140, 180], // × сложность
+    splitVx: 140, // разлёт в стороны
+  },
 } as const;
 
 /** Задержка первого выстрела обычных врагов. */
@@ -77,6 +109,12 @@ export const SPAWN = {
   saucerChance: 0.12, // + время / saucerChanceTime, но не больше saucerChanceMax
   saucerChanceTime: 150,
   saucerChanceMax: 0.45,
+  splitterAfter: 12, // новые враги появляются с этой секунды партии…
+  splitterChance: 0.12, // …с таким шансом на волне
+  kamikazeAfter: 20,
+  kamikazeChance: 0.12,
+  shielderAfter: 40,
+  shielderChance: 0.08,
   wedgeAfter: 8, // клин из трёх разведчиков — с этой секунды
   wedgeChance: 0.25,
 } as const;

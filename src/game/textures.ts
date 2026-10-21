@@ -13,6 +13,10 @@ export type TextureName =
   | 'scout'
   | 'saucer'
   | 'mother'
+  | 'kamikaze'
+  | 'shielder'
+  | 'splitter'
+  | 'mini'
   | 'spark'
   | 'star'
   | 'gun'
@@ -100,6 +104,45 @@ export function makeTextures(renderer: Renderer): Textures {
       g.ellipse(55, 32, 54, 11).fill(0x8e44c7);
       g.ellipse(55, 30, 40, 6).fill(0xb26be8);
       for (let i = 0; i < 7; i++) g.circle(13 + i * 14, 40, 3).fill(i % 2 ? 0xff4d6d : 0xffe066);
+    }),
+
+    // Камикадзе — красный дротик носом вниз, разгоняется на игрока
+    kamikaze: bake((g) => {
+      g.poly([15, 34, 29, 4, 15, 11, 1, 4]).fill(0xc93a24);
+      g.poly([15, 30, 25, 6, 15, 12, 5, 6]).fill(0xff5a3c);
+      g.ellipse(15, 18, 4, 5).fill(0x1a0a08);
+      g.circle(15, 19.5, 1.6).fill(0xffe066);
+    }),
+
+    // Щитоносец — броня снизу, бить можно только по краям
+    shielder: bake((g) => {
+      g.ellipse(28, 18, 22, 16).fill(0xc9952e);
+      g.ellipse(28, 15, 19, 12).fill(0xf2c14e);
+      g.ellipse(21, 15, 3.5, 4.5).fill(0x2a1a05);
+      g.ellipse(35, 15, 3.5, 4.5).fill(0x2a1a05);
+      g.circle(22, 13.5, 1.2).fill(0xffffff);
+      g.circle(36, 13.5, 1.2).fill(0xffffff);
+      g.roundRect(12, 33, 32, 9, 4).fill(0x8a96ad); // щит, ширина = 2 × plateHalf
+      g.roundRect(12, 33, 32, 4, 2).fill(0xdfe6f2);
+      for (const x of [17, 28, 39]) g.circle(x, 39, 1.3).fill(0x4a5266);
+    }),
+
+    // Сплиттер — при смерти распадается на два осколка
+    splitter: bake((g) => {
+      g.circle(22, 22, 21).fill(0xc85fa8);
+      g.circle(22, 20, 18).fill(0xff8fd8);
+      g.moveTo(22, 2).lineTo(19, 12).lineTo(25, 20).lineTo(20, 30).lineTo(22, 42).stroke({ width: 2, color: 0x5a1a48 });
+      g.circle(13, 19, 4).fill(0x2a0a22);
+      g.circle(31, 19, 4).fill(0x2a0a22);
+      g.circle(14, 18, 1.4).fill(0xffffff);
+      g.circle(32, 18, 1.4).fill(0xffffff);
+    }),
+
+    mini: bake((g) => {
+      g.circle(12, 12, 11).fill(0xc85fa8);
+      g.circle(12, 11, 9).fill(0xff8fd8);
+      g.circle(12, 11, 3).fill(0x2a0a22);
+      g.circle(12.8, 10.2, 1).fill(0xffffff);
     }),
 
     spark: bake((g) => {
