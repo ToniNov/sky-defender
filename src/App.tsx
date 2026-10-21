@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { version } from '../package.json';
 import { music, setAudioEnabled, unlockAudio } from './audio';
 import { Game, type Phase } from './game/Game';
+import { UPGRADE_NAMES, UPGRADES, upgradeMax, type UpgradeName } from './game/balance';
 import type { WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
@@ -35,7 +36,7 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | null>(null); // экран поверх меню или паузы
   const progressRef = useRef(progress);
   const runCoinsRef = useRef(0);
   const bankedRef = useRef(0); // сколько монет этой партии уже зачислено в прогресс
@@ -58,17 +59,35 @@ export default function App() {
     });
   }, []);
 
-  /** Зачислить монеты партии и рекорд в сохранение. Можно звать сколько угодно раз — монеты не задвоятся. */
-  const bank = useCallback((finalScore = 0) => {
-    const p = progressRef.current;
-    const coins = runCoinsRef.current - bankedRef.current;
-    if (coins <= 0 && finalScore <= p.best) return;
-    bankedRef.current = runCoinsRef.current;
-    const next = { best: Math.max(p.best, finalScore), coins: p.coins + coins, t: Date.now() };
+  const commitProgress = useCallback((change: Partial<Progress>) => {
+    const next = { ...progressRef.current, ...change, t: Date.now() };
     progressRef.current = next;
     setProgress(next);
     saveProgress(next);
   }, []);
+
+  /** Зачислить монеты партии и рекорд в сохранение. Можно звать сколько угодно раз — монеты не задвоятся. */
+  const bank = useCallback(
+    (finalScore = 0) => {
+      const p = progressRef.current;
+      const coins = runCoinsRef.current - bankedRef.current;
+      if (coins <= 0 && finalScore <= p.best) return;
+      bankedRef.current = runCoinsRef.current;
+      commitProgress({ best: Math.max(p.best, finalScore), coins: p.coins + coins });
+    },
+    [commitProgress],
+  );
+
+  const buyUpgrade = useCallback(
+    (name: UpgradeName) => {
+      const { coins, upgrades } = progressRef.current;
+      const cost = UPGRADES[name].costs[upgrades[name]];
+      if (cost === undefined || cost > coins) return;
+      commitProgress({ coins: coins - cost, upgrades: { ...upgrades, [name]: upgrades[name] + 1 } });
+      haptic.notify('success');
+    },
+    [commitProgress],
+  );
 
   // На паузе и при выходе в меню монеты сохраняем сразу: игру могут закрыть, не доиграв
   useEffect(() => {
@@ -159,26 +178,26 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // Esc / P — пауза на компьютере (при открытых настройках Esc закрывает их)
+  // Esc / P — пауза на компьютере (открытые настройки или ангар Esc закрывает)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Escape' && e.code !== 'KeyP') return;
-      if (settingsOpen) {
-        if (e.code === 'Escape') setSettingsOpen(false);
+      if (overlay) {
+        if (e.code === 'Escape') setOverlay(null);
         return;
       }
       setPhase((p) => (p === 'playing' ? 'paused' : p === 'paused' ? 'playing' : p));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [settingsOpen]);
+  }, [overlay]);
 
-  // Системная кнопка «Назад» в Telegram: закрывает настройки; в бою — пауза, на паузе — в меню
+  // Системная кнопка «Назад» в Telegram: закрывает настройки и ангар; в бою — пауза, на паузе — в меню
   useEffect(() => {
     const bb = backButton;
-    if (!bb || (phase !== 'playing' && phase !== 'paused' && !settingsOpen)) return;
+    if (!bb || (phase !== 'playing' && phase !== 'paused' && !overlay)) return;
     const onBack = () => {
-      if (settingsOpen) setSettingsOpen(false);
+      if (overlay) setOverlay(null);
       else setPhase((p) => (p === 'playing' ? 'paused' : 'menu'));
     };
     bb.show();
@@ -187,7 +206,7 @@ export default function App() {
       bb.offClick(onBack);
       bb.hide();
     };
-  }, [phase, settingsOpen]);
+  }, [phase, overlay]);
 
   const inGame = phase === 'playing' || phase === 'paused';
 
@@ -200,7 +219,7 @@ export default function App() {
         autoDensity
         resolution={Math.min(window.devicePixelRatio || 1, 2)}
       >
-        <Game phase={phase} session={session} events={events} />
+        <Game phase={phase} session={session} events={events} upgrades={progress.upgrades} />
       </Application>
 
       {inGame && (
@@ -247,15 +266,15 @@ export default function App() {
         </div>
       )}
 
-      {phase === 'menu' && !settingsOpen && (
+      {phase === 'menu' && !overlay && (
         <div className="corner">
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Настройки">
+          <button className="icon-btn" onClick={() => setOverlay('settings')} aria-label="Настройки">
             <span className="sound-icon">⚙️</span>
           </button>
         </div>
       )}
 
-      {phase === 'menu' && !settingsOpen && (
+      {phase === 'menu' && !overlay && (
         <Screen>
           <div className="logo" aria-hidden>
             <PlaneIcon />
@@ -270,6 +289,9 @@ export default function App() {
           </p>
           <button className="btn primary" onClick={start}>
             Взлететь
+          </button>
+          <button className="btn ghost" onClick={() => setOverlay('hangar')}>
+            Ангар
           </button>
           {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
           {progress.coins > 0 && (
@@ -289,18 +311,20 @@ export default function App() {
         </Screen>
       )}
 
-      {settingsOpen && (
-        <SettingsScreen settings={settings} onChange={updateSettings} onClose={() => setSettingsOpen(false)} />
+      {overlay === 'settings' && (
+        <SettingsScreen settings={settings} onChange={updateSettings} onClose={() => setOverlay(null)} />
       )}
 
-      {phase === 'paused' && !settingsOpen && (
+      {overlay === 'hangar' && <HangarScreen progress={progress} onBuy={buyUpgrade} onClose={() => setOverlay(null)} />}
+
+      {phase === 'paused' && !overlay && (
         <Screen>
           <h2 className="title small">Пауза</h2>
           <p className="score-big">{score}</p>
           <button className="btn primary" onClick={() => setPhase('playing')}>
             Продолжить
           </button>
-          <button className="btn ghost" onClick={() => setSettingsOpen(true)}>
+          <button className="btn ghost" onClick={() => setOverlay('settings')}>
             Настройки
           </button>
           <button className="btn ghost" onClick={() => setPhase('menu')}>
@@ -372,6 +396,73 @@ function SettingsScreen({
           </div>
         ))}
       </div>
+      <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
+  );
+}
+
+const UPGRADE_INFO: Record<UpgradeName, { title: string; effect: (level: number) => string }> = {
+  fireRate: {
+    title: 'Скорострельность',
+    effect: (l) => `+${Math.round((1 / (1 - UPGRADES.fireRate.intervalStep * l) - 1) * 100)}% выстрелов`,
+  },
+  startWeapon: { title: 'Стартовая пушка', effect: (l) => `уровень ${1 + l} с начала боя` },
+  extraLife: { title: 'Запасная жизнь', effect: (l) => `+${l} к жизням на старте` },
+  magnet: { title: 'Сильный магнит', effect: (l) => `+${l * UPGRADES.magnet.timeStep} с действия` },
+};
+
+function HangarScreen({
+  progress,
+  onBuy,
+  onClose,
+}: {
+  progress: Progress;
+  onBuy: (name: UpgradeName) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Screen>
+      <h2 className="title small">Ангар</h2>
+      <p className="wallet" aria-label={`Монеты: ${progress.coins}`}>
+        <CoinIcon />
+        {progress.coins}
+      </p>
+      <ul className="upgrades">
+        {UPGRADE_NAMES.map((name) => {
+          const level = progress.upgrades[name];
+          const max = upgradeMax(name);
+          const cost = UPGRADES[name].costs[level];
+          const info = UPGRADE_INFO[name];
+          return (
+            <li className="upgrade" key={name}>
+              <div className="upgrade-text">
+                <span className="upgrade-title">{info.title}</span>
+                <span className="upgrade-effect">{level > 0 ? info.effect(level) : 'не куплено'}</span>
+                <span className="upgrade-pips" aria-label={`Уровень ${level} из ${max}`}>
+                  {Array.from({ length: max }, (_, i) => (
+                    <i key={i} className={i < level ? 'on' : ''} />
+                  ))}
+                </span>
+              </div>
+              {cost === undefined ? (
+                <span className="upgrade-max">Макс.</span>
+              ) : (
+                <button
+                  className="btn buy"
+                  disabled={cost > progress.coins}
+                  onClick={() => onBuy(name)}
+                  aria-label={`Купить: ${info.title} за ${cost}`}
+                >
+                  <CoinIcon />
+                  {cost}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
       <button className="btn primary" onClick={onClose}>
         Готово
       </button>

@@ -1,3 +1,4 @@
+import { NO_UPGRADES, UPGRADE_NAMES, upgradeMax, type Upgrades } from './game/balance';
 import { readCloudString, readLocalString, writeString } from './telegram';
 
 /**
@@ -11,22 +12,25 @@ import { readCloudString, readLocalString, writeString } from './telegram';
 export interface Progress {
   best: number;
   coins: number;
+  /** Уровни улучшений из ангара. */
+  upgrades: Upgrades;
   /** Время последнего сохранения (мс): из облака и устройства берём более свежее. */
   t: number;
 }
 
 type Raw = Record<string, unknown>;
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 const KEY = 'progress';
 const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд лежал отдельным числом
 
 /** MIGRATIONS[n] переводит данные версии n в версию n + 1. */
 const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   0: (d) => ({ ...d, coins: 0 }),
+  1: (d) => ({ ...d, upgrades: {} }),
 };
 
-export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, t: 0 };
+export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, t: 0 };
 
 const count = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
 
@@ -36,6 +40,7 @@ const count = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x 
  */
 let unknownFields: Raw = {};
 let storedVersion = 0; // и номер версии не понижаем
+let unknownUpgrades: Raw = {}; // и улучшения, которых здесь ещё нет
 
 export function migrate(data: Raw): Raw {
   let d = data;
@@ -62,10 +67,14 @@ function parse(json: string | null, legacyBest: string | null): Raw | null {
 
 function toProgress(d: Raw | null): Progress {
   if (!d) return EMPTY_PROGRESS;
-  const { v, best, coins, t, ...rest } = d;
+  const { v, best, coins, upgrades, t, ...rest } = d;
   unknownFields = { ...unknownFields, ...rest };
   storedVersion = Math.max(storedVersion, count(v));
-  return { best: count(best), coins: count(coins), t: count(t) };
+  const raw: Raw = upgrades && typeof upgrades === 'object' ? (upgrades as Raw) : {};
+  const known = { ...NO_UPGRADES };
+  for (const name of UPGRADE_NAMES) known[name] = Math.min(upgradeMax(name), count(raw[name]));
+  for (const [name, level] of Object.entries(raw)) if (!(name in known)) unknownUpgrades[name] = level;
+  return { best: count(best), coins: count(coins), upgrades: known, t: count(t) };
 }
 
 /** Из двух копий берём более свежую, а рекорд — лучший из обеих. */
@@ -86,5 +95,15 @@ export async function loadCloudProgress(): Promise<Progress> {
 }
 
 export function saveProgress(p: Progress) {
-  writeString(KEY, JSON.stringify({ ...unknownFields, v: Math.max(SAVE_VERSION, storedVersion), best: p.best, coins: p.coins, t: p.t }));
+  writeString(
+    KEY,
+    JSON.stringify({
+      ...unknownFields,
+      v: Math.max(SAVE_VERSION, storedVersion),
+      best: p.best,
+      coins: p.coins,
+      upgrades: { ...unknownUpgrades, ...p.upgrades },
+      t: p.t,
+    }),
+  );
 }

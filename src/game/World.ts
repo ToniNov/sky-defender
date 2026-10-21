@@ -1,6 +1,22 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
-import { BOSS, COINS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, WAVES, WEAPON_PATTERNS, type PowerUpKind } from './balance';
+import {
+  BOSS,
+  COINS,
+  COMBO,
+  DIFFICULTY_TIME,
+  ENEMY,
+  ENEMY_BULLET_R,
+  ENEMY_FIRST_SHOT,
+  NO_UPGRADES,
+  PLAYER,
+  POWER_UP,
+  UPGRADES,
+  WAVES,
+  WEAPON_PATTERNS,
+  type PowerUpKind,
+  type Upgrades,
+} from './balance';
 import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
 import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves';
@@ -243,6 +259,9 @@ export class World {
 
   private score = 0;
   private coinCount = 0; // монет собрано за партию
+  private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
+  private fireInterval: number = PLAYER.fireInterval;
+  private magnetTime: number = POWER_UP.magnetTime;
   private lives: number = PLAYER.startLives;
   private weapon = 1;
   private combo = 0; // врагов сбито подряд без урона
@@ -374,13 +393,16 @@ export class World {
     this.root.position.set(0, 0);
   }
 
-  /** Новая игра. */
-  reset() {
+  /** Новая игра с улучшениями из ангара. */
+  reset(upgrades: Upgrades = NO_UPGRADES) {
     this.clear();
+    this.upgrades = upgrades;
+    this.fireInterval = PLAYER.fireInterval * (1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate);
+    this.magnetTime = POWER_UP.magnetTime + UPGRADES.magnet.timeStep * upgrades.magnet;
     this.score = 0;
     this.coinCount = 0;
-    this.lives = PLAYER.startLives;
-    this.weapon = 1;
+    this.lives = Math.min(PLAYER.maxLives, PLAYER.startLives + upgrades.extraLife);
+    this.weapon = Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon);
     this.combo = 0;
     this.elapsed = 0;
     this.fireCd = PLAYER.firstShotDelay;
@@ -489,7 +511,7 @@ export class World {
     this.fireCd -= dt;
     if (this.fireCd <= 0 && !this.cheats.holdFire) {
       this.fire();
-      this.fireCd = PLAYER.fireInterval;
+      this.fireCd = this.fireInterval;
     }
   }
 
@@ -1264,7 +1286,7 @@ export class World {
       } else if (kind === 'shield') {
         this.setShield(true);
       } else if (kind === 'magnet') {
-        this.magnet = POWER_UP.magnetTime;
+        this.magnet = this.magnetTime;
         this.magnetRing.visible = true;
       } else {
         this.detonateBomb();
@@ -1288,6 +1310,8 @@ export class World {
         alive: this.alive,
         score: this.score,
         coins: this.coinCount,
+        upgrades: { ...this.upgrades },
+        fireInterval: this.fireInterval,
         wave: this.wave,
         lives: this.lives,
         weapon: this.weapon,

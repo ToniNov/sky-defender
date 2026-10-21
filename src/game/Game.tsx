@@ -1,6 +1,7 @@
 import { extend, useApplication, useTick } from '@pixi/react';
 import { Container, type Ticker } from 'pixi.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { Upgrades } from './balance';
 import { makeTextures } from './textures';
 import { World, type WorldEvents } from './World';
 
@@ -13,6 +14,8 @@ interface Props {
   /** Увеличивается при каждом старте — сигнал начать новую игру. */
   session: number;
   events: WorldEvents;
+  /** Улучшения из ангара — применяются при старте партии. */
+  upgrades: Upgrades;
 }
 
 /**
@@ -25,15 +28,17 @@ export function Game(props: Props) {
 }
 
 /** Мост между React и игровым миром: создаёт World, кормит его тиками и вводом. */
-function GameScene({ phase, session, events }: Props) {
+function GameScene({ phase, session, events, upgrades }: Props) {
   const { app } = useApplication();
   const containerRef = useRef<Container>(null);
   const phaseRef = useRef(phase);
   const eventsRef = useRef(events);
+  const upgradesRef = useRef(upgrades);
 
   useEffect(() => {
     phaseRef.current = phase;
     eventsRef.current = events;
+    upgradesRef.current = upgrades;
   });
 
   const world = useMemo(() => {
@@ -75,7 +80,7 @@ function GameScene({ phase, session, events }: Props) {
   }, [app, world]);
 
   useEffect(() => {
-    if (session > 0) world.reset();
+    if (session > 0) world.reset(upgradesRef.current);
   }, [session, world]);
 
   useEffect(() => {

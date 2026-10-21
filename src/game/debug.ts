@@ -23,6 +23,9 @@ export interface DebugSnapshot {
   score: number;
   /** Монет собрано за партию. */
   coins: number;
+  /** Уровни улучшений из ангара в этой партии. */
+  upgrades: Record<string, number>;
+  fireInterval: number;
   wave: number;
   lives: number;
   weapon: number;

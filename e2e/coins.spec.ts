@@ -88,7 +88,7 @@ test('старый рекорд переезжает в новое сохран�
   await collectCoin(page);
   await pauseToMenu(page);
   await expect(page.getByText('Рекорд: 500')).toBeVisible();
-  expect(await savedProgress(page)).toMatchObject({ v: 1, best: 500, coins: 1 });
+  expect(await savedProgress(page)).toMatchObject({ v: 2, best: 500, coins: 1, upgrades: { fireRate: 0 } });
 });
 
 test('сохранение из новой версии игры не теряет незнакомые поля', async ({ page }) => {

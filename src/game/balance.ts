@@ -163,6 +163,35 @@ export const COINS = {
   fallSpeed: 130,
 } as const;
 
+/**
+ * Ангар: улучшения за монеты, действуют с начала каждой партии.
+ * costs[n] — цена перехода с уровня n на n + 1, длина массива = максимальный уровень.
+ */
+export const UPGRADES = {
+  fireRate: {
+    costs: [40, 100, 220],
+    intervalStep: 0.1, // −10% к паузе между выстрелами за уровень
+  },
+  startWeapon: {
+    costs: [120, 350], // +1 к стартовому уровню пушки
+  },
+  extraLife: {
+    costs: [80, 260], // +1 жизнь на старте (не больше PLAYER.maxLives)
+  },
+  magnet: {
+    costs: [30, 80, 180],
+    timeStep: 4, // +секунд действия магнита за уровень
+  },
+} as const;
+
+export type UpgradeName = keyof typeof UPGRADES;
+/** Купленные уровни улучшений (0 — не куплено). */
+export type Upgrades = Record<UpgradeName, number>;
+
+export const UPGRADE_NAMES = Object.keys(UPGRADES) as UpgradeName[];
+export const NO_UPGRADES: Upgrades = { fireRate: 0, startWeapon: 0, extraLife: 0, magnet: 0 };
+export const upgradeMax = (name: UpgradeName) => UPGRADES[name].costs.length;
+
 export type PowerUpKind = keyof typeof POWER_UP.drops;
 
 /** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */
