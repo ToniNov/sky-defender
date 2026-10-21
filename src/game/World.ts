@@ -1,8 +1,26 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
-import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, WAVES, WEAPON_PATTERNS, type PowerUpKind } from './balance';
+import {
+  BOSS,
+  COINS,
+  COMBO,
+  DIFFICULTY_TIME,
+  ENEMY,
+  ENEMY_BULLET_R,
+  ENEMY_FIRST_SHOT,
+  NO_UPGRADES,
+  PLAYER,
+  POWER_UP,
+  UPGRADES,
+  WAVES,
+  WEAPON_PATTERNS,
+  DEFAULT_SKIN,
+  type PowerUpKind,
+  type SkinName,
+  type Upgrades,
+} from './balance';
 import type { WorldDebug } from './debug';
-import type { Textures } from './textures';
+import { planeTexture, type Textures } from './textures';
 import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves';
 
 /**
@@ -15,6 +33,12 @@ import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves'
 export type EnemyKind = 'scout' | 'saucer' | 'mother' | 'kamikaze' | 'shielder' | 'splitter' | 'mini';
 export type UpdateMode = 'run' | 'idle' | 'frozen';
 
+/** С чем игрок вылетает: улучшения и скин из ангара. */
+export interface Loadout {
+  upgrades: Upgrades;
+  skin: SkinName;
+}
+
 export interface WorldEvents {
   score(n: number): void;
   lives(n: number): void;
@@ -24,6 +48,12 @@ export interface WorldEvents {
   hit(): void;
   kill(kind: EnemyKind): void;
   powerUp(): void;
+  /** Монет собрано за партию. */
+  coins(n: number): void;
+  /** Началась волна n. */
+  wave(n: number): void;
+  /** Сбит флагман; flawless — игрок не потерял ни одной жизни, пока тот был на поле. */
+  bossDown(flawless: boolean): void;
   gameOver(score: number): void;
 }
 
@@ -47,6 +77,7 @@ interface Enemy {
   stopY: number;
   shots: number; // босс: сколько пуль осталось в очереди
   inFormation: boolean; // разведчик в строю не доворачивает на игрока, иначе строй слипается
+  flawless: boolean; // босс: игрок ещё не терял жизнь, пока он на поле
 }
 type BossAttack = 'fan' | 'burst' | 'homing';
 interface Missile {
@@ -75,6 +106,12 @@ interface Popup {
 interface PowerUp {
   s: Sprite;
   kind: PowerUpKind;
+  t: number;
+}
+interface Coin {
+  s: Sprite;
+  vx: number;
+  vy: number;
   t: number;
 }
 interface Star {
@@ -119,6 +156,8 @@ const DROP_KINDS = Object.keys(POWER_UP.drops) as PowerUpKind[];
 const MAGNET_BLINK_TIME = 2; // последние секунды магнита кольцо мигает
 const BOMB_FLASH = 0.35; // сек, белая вспышка на весь экран
 const BOMB_SHAKE = 18;
+const COIN_COLOR = 0xffd23f;
+const COIN_DRAG = 3; // разлёт монет босса гаснет за ~1/3 с
 
 const WAVE_TEXT_COLOR = 0xffe066;
 
@@ -206,6 +245,7 @@ export class World {
 
   private player = new Container();
   private flame: Sprite;
+  private body: Sprite;
   private shieldBubble: Sprite;
   private magnetRing: Sprite;
   private bombFlash = new Graphics();
@@ -215,6 +255,7 @@ export class World {
   private bulletPool: SpritePool;
   private enemyBulletPool: SpritePool;
   private sparkPool: SpritePool;
+  private coinPool: SpritePool;
 
   private stars: Star[] = [];
   private enemies: Enemy[] = [];
@@ -222,6 +263,7 @@ export class World {
   private enemyBullets: Bullet[] = [];
   private particles: Particle[] = [];
   private powerUps: PowerUp[] = [];
+  private coins: Coin[] = [];
   private missiles: Missile[] = [];
   private popups: Popup[] = [];
 
@@ -230,6 +272,11 @@ export class World {
   private starsPlaced = false;
 
   private score = 0;
+  private coinCount = 0; // монет собрано за партию
+  private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
+  private skin: SkinName = DEFAULT_SKIN;
+  private fireInterval: number = PLAYER.fireInterval;
+  private magnetTime: number = POWER_UP.magnetTime;
   private lives: number = PLAYER.startLives;
   private weapon = 1;
   private combo = 0; // врагов сбито подряд без урона
@@ -265,6 +312,7 @@ export class World {
     this.bulletPool = new SpritePool(textures.bullet, this.bulletLayer);
     this.enemyBulletPool = new SpritePool(textures.enemyBullet, this.fxLayer);
     this.sparkPool = new SpritePool(textures.spark, this.fxLayer);
+    this.coinPool = new SpritePool(textures.coin, this.itemLayer);
 
     this.warnText = new Text({
       text: 'ВНИМАНИЕ!\nФЛАГМАН',
@@ -308,8 +356,9 @@ export class World {
     this.flame = new Sprite(textures.flame);
     this.flame.anchor.set(0.5, 0);
     this.flame.y = 24;
-    const body = new Sprite(textures.plane);
+    const body = new Sprite(textures[planeTexture(DEFAULT_SKIN)]);
     body.anchor.set(0.5);
+    this.body = body;
     this.shieldBubble = new Sprite(textures.shieldBubble);
     this.shieldBubble.anchor.set(0.5);
     this.magnetRing = new Sprite(textures.magnetRing);
@@ -345,6 +394,7 @@ export class World {
     while (this.bullets.length) releaseAt(this.bullets, this.bullets.length - 1, this.bulletPool);
     while (this.enemyBullets.length) releaseAt(this.enemyBullets, this.enemyBullets.length - 1, this.enemyBulletPool);
     while (this.particles.length) releaseAt(this.particles, this.particles.length - 1, this.sparkPool);
+    while (this.coins.length) releaseAt(this.coins, this.coins.length - 1, this.coinPool);
     this.alive = false;
     this.deathTimer = 0;
     this.setShield(false);
@@ -359,12 +409,18 @@ export class World {
     this.root.position.set(0, 0);
   }
 
-  /** Новая игра. */
-  reset() {
+  /** Новая игра с улучшениями и скином из ангара. */
+  reset({ upgrades, skin }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN }) {
     this.clear();
+    this.upgrades = upgrades;
+    this.skin = skin;
+    this.body.texture = this.tx[planeTexture(skin)];
+    this.fireInterval = PLAYER.fireInterval * (1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate);
+    this.magnetTime = POWER_UP.magnetTime + UPGRADES.magnet.timeStep * upgrades.magnet;
     this.score = 0;
-    this.lives = PLAYER.startLives;
-    this.weapon = 1;
+    this.coinCount = 0;
+    this.lives = Math.min(PLAYER.maxLives, PLAYER.startLives + upgrades.extraLife);
+    this.weapon = Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon);
     this.combo = 0;
     this.elapsed = 0;
     this.fireCd = PLAYER.firstShotDelay;
@@ -379,6 +435,7 @@ export class World {
     this.ev.lives(this.lives);
     this.ev.weapon(this.weapon);
     this.ev.combo(1);
+    this.ev.coins(0);
     this.startWave(1);
   }
 
@@ -420,6 +477,7 @@ export class World {
     this.updateEnemyBullets(dt);
     this.updateMissiles(dt);
     this.updatePowerUps(dt);
+    this.updateCoins(dt);
     this.updateParticles(dt);
     this.updatePopups(dt);
     this.updateBossWarning(dt);
@@ -471,7 +529,7 @@ export class World {
     this.fireCd -= dt;
     if (this.fireCd <= 0 && !this.cheats.holdFire) {
       this.fire();
-      this.fireCd = PLAYER.fireInterval;
+      this.fireCd = this.fireInterval;
     }
   }
 
@@ -506,6 +564,7 @@ export class World {
     }
     this.lives--;
     this.ev.lives(this.lives);
+    for (const e of this.enemies) e.flawless = false;
     if (this.combo > 0) {
       this.combo = 0;
       this.ev.combo(1);
@@ -541,6 +600,7 @@ export class World {
     this.waveTimer = WAVES.introTime;
     this.waveBanner = WAVES.introTime;
     this.waveText.text = `ВОЛНА ${n}`;
+    this.ev.wave(n);
   }
 
   /** Построения вылетают по очереди; когда все вылетели и поле опустело — следующая волна. */
@@ -696,6 +756,7 @@ export class World {
       stopY: kind === 'kamikaze' ? randIn(ENEMY.kamikaze.stopAt) * this.h : 0,
       shots: 0,
       inFormation: false,
+      flawless: true,
     };
     if (kind === 'mother') {
       e.bar = new Graphics();
@@ -944,12 +1005,18 @@ export class World {
     this.score += points;
     this.ev.score(this.score);
     this.ev.kill(e.kind);
+    if (big) this.ev.bossDown(e.flawless);
     this.spawnPopup(x, y - e.r, `+${points}`, color);
 
     if (big) {
+      for (let k = 0; k < COINS.boss; k++) {
+        const a = (k / COINS.boss) * Math.PI * 2;
+        this.spawnCoin(x, y, Math.cos(a) * COINS.scatter, Math.sin(a) * COINS.scatter);
+      }
       this.spawnPowerUp(x, y, this.lives < PLAYER.maxLives && Math.random() < POWER_UP.bossLifeChance ? 'life' : 'gun');
       return;
     }
+    if (Math.random() < COINS.dropChance) this.spawnCoin(x, y, 0, 0);
     let r = Math.random();
     for (const kind of DROP_KINDS) {
       r -= POWER_UP.drops[kind];
@@ -1026,6 +1093,35 @@ export class World {
       p.s.scale.set(1 + Math.sin(p.t * 7) * 0.12);
       if (p.kind === 'gun') p.s.rotation += dt * 2;
       if (p.s.y > this.h + 30) removeAt(this.powerUps, i);
+    }
+  }
+
+  private spawnCoin(x: number, y: number, vx: number, vy: number) {
+    const s = this.coinPool.get();
+    s.position.set(x, y);
+    this.coins.push({ s, vx, vy, t: Math.random() * 6 });
+  }
+
+  private updateCoins(dt: number) {
+    const drag = Math.exp(-COIN_DRAG * dt);
+    for (let i = this.coins.length - 1; i >= 0; i--) {
+      const c = this.coins[i];
+      c.t += dt;
+      if (this.magnet > 0 && this.alive) {
+        const dx = this.player.x - c.s.x;
+        const dy = this.player.y - c.s.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const step = Math.min(d, POWER_UP.magnetSpeed * dt);
+        c.s.x += (dx / d) * step;
+        c.s.y += (dy / d) * step;
+      } else {
+        c.vx *= drag;
+        c.vy *= drag;
+        c.s.x += c.vx * dt;
+        c.s.y += (c.vy + COINS.fallSpeed) * dt;
+      }
+      c.s.scale.x = Math.cos(c.t * 6); // монета вращается
+      if (c.s.y > this.h + 20) releaseAt(this.coins, i, this.coinPool);
     }
   }
 
@@ -1178,6 +1274,21 @@ export class World {
       }
     }
 
+    // монеты
+    let picked = false;
+    for (let i = this.coins.length - 1; i >= 0; i--) {
+      const c = this.coins[i];
+      if (!near(c.s, this.player, PLAYER.pickupR)) continue;
+      this.explode(c.s.x, c.s.y, COIN_COLOR, 4, 90);
+      releaseAt(this.coins, i, this.coinPool);
+      this.coinCount++;
+      picked = true;
+    }
+    if (picked) {
+      this.ev.coins(this.coinCount);
+      sfx.coin();
+    }
+
     // бонусы
     for (let i = this.powerUps.length - 1; i >= 0; i--) {
       const p = this.powerUps[i];
@@ -1197,7 +1308,7 @@ export class World {
       } else if (kind === 'shield') {
         this.setShield(true);
       } else if (kind === 'magnet') {
-        this.magnet = POWER_UP.magnetTime;
+        this.magnet = this.magnetTime;
         this.magnetRing.visible = true;
       } else {
         this.detonateBomb();
@@ -1220,6 +1331,10 @@ export class World {
         h: this.h,
         alive: this.alive,
         score: this.score,
+        coins: this.coinCount,
+        upgrades: { ...this.upgrades },
+        skin: this.skin,
+        fireInterval: this.fireInterval,
         wave: this.wave,
         lives: this.lives,
         weapon: this.weapon,
@@ -1235,6 +1350,7 @@ export class World {
           ...pos(e.s),
         })),
         powerUps: this.powerUps.map((p) => ({ kind: p.kind, ...pos(p.s) })),
+        coinsOnField: this.coins.map((c) => ({ kind: 'coin', ...pos(c.s) })),
         missiles: this.missiles.map((m) => ({ kind: 'missile', ...pos(m.s) })),
         enemyBullets: this.enemyBullets.length,
       }),
@@ -1250,6 +1366,7 @@ export class World {
         if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
         this.spawnPowerUp(x, y, kind as PowerUpKind);
       },
+      spawnCoin: (x, y) => this.spawnCoin(x, y, 0, 0),
       startWave: (n) => {
         this.autoSpawn = true;
         this.startWave(n);

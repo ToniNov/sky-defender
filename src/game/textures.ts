@@ -1,12 +1,18 @@
 import { Graphics, type Renderer, type Texture } from 'pixi.js';
+import { SKIN_NAMES, type SkinName } from './balance';
+import { skinSvg } from './skins';
 
 /**
  * Вся графика игры рисуется векторно через Graphics и один раз
  * "запекается" в текстуры. Дальше в игре используются только быстрые Sprite.
  * Хотите свои картинки — замените нужный пункт на Assets.load('plane.png').
  */
+/** Самолёт игрока в каждом скине: plane_classic, plane_delta… */
+export type PlaneTextureName = `plane_${SkinName}`;
+export const planeTexture = (skin: SkinName): PlaneTextureName => `plane_${skin}`;
+
 export type TextureName =
-  | 'plane'
+  | PlaneTextureName
   | 'flame'
   | 'bullet'
   | 'enemyBullet'
@@ -26,7 +32,8 @@ export type TextureName =
   | 'magnet'
   | 'bomb'
   | 'shieldBubble'
-  | 'magnetRing';
+  | 'magnetRing'
+  | 'coin';
 
 export type Textures = Record<TextureName, Texture>;
 
@@ -39,19 +46,13 @@ export function makeTextures(renderer: Renderer): Textures {
     return texture;
   };
 
+  const planes = Object.fromEntries(
+    SKIN_NAMES.map((skin) => [planeTexture(skin), bake((g) => g.svg(skinSvg(skin)))]),
+  ) as Record<PlaneTextureName, Texture>;
+
   return {
-    // Самолёт игрока (носом вверх), ~60×58
-    plane: bake((g) => {
-      g.poly([32, 20, 62, 40, 62, 47, 32, 39, 2, 47, 2, 40]).fill(0x3fa9f5); // крылья
-      g.poly([32, 20, 62, 40, 62, 43, 32, 33, 2, 43, 2, 40]).fill(0x7cc8ff); // блик на крыльях
-      g.rect(2, 40, 3, 7).fill(0xff5a5f); // законцовки крыльев
-      g.rect(59, 40, 3, 7).fill(0xff5a5f);
-      g.poly([32, 46, 46, 57, 46, 61, 32, 56, 18, 61, 18, 57]).fill(0x2b7fc4); // хвост
-      g.roundRect(26, 4, 12, 54, 6).fill(0xeef6ff); // фюзеляж
-      g.rect(26, 30, 12, 4).fill(0xff5a5f); // полоса
-      g.ellipse(32, 17, 3.5, 7).fill(0x1b2b48); // кабина
-      g.ellipse(31, 14.5, 1.2, 3).fill({ color: 0xffffff, alpha: 0.7 });
-    }),
+    // Самолёты игрока (носом вверх, ~60×58) — рисунки в skins.ts
+    ...planes,
 
     flame: bake((g) => {
       g.poly([0, 0, 10, 0, 5, 18]).fill(0xff8a00);
@@ -208,6 +209,13 @@ export function makeTextures(renderer: Renderer): Textures {
       g.circle(40, 40, 38).fill({ color: 0x5fd4ff, alpha: 0.12 });
       g.circle(40, 40, 38).stroke({ width: 2.5, color: 0x9be7ff, alpha: 0.85 });
       g.arc(40, 40, 32, -2.5, -1.6).stroke({ width: 3, color: 0xffffff, alpha: 0.6 });
+    }),
+
+    // Монета, ~18×18
+    coin: bake((g) => {
+      g.circle(9, 9, 9).fill(0xe0a100);
+      g.circle(9, 9, 7).fill(0xffd23f);
+      g.roundRect(7.5, 4.5, 3, 9, 1.5).fill(0xfff1a8);
     }),
 
     // Пунктирное кольцо, пока действует магнит

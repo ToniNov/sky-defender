@@ -78,6 +78,391 @@
   box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
 }
 
+.hud-coins {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.coin-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff1a8 0 18%, var(--gold) 20% 70%, #e0a100 72%);
+  box-shadow: 0 0 6px rgba(255, 210, 63, 0.5);
+  flex: none;
+}
+
+.wallet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.btn.gift {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
+  font-size: 16px;
+  color: var(--gold);
+  background: rgba(255, 210, 63, 0.12);
+  border: 1px solid rgba(255, 210, 63, 0.5);
+  animation: gift-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes gift-glow {
+  50% {
+    box-shadow: 0 0 18px rgba(255, 210, 63, 0.45);
+  }
+}
+
+.daily-days {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.daily-days li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* седьмой день — во всю ширину последнего ряда */
+.daily-days li:last-child {
+  grid-column: span 2;
+}
+
+.daily-days li.done {
+  opacity: 0.5;
+}
+
+.daily-days li.today {
+  color: var(--gold);
+  border-color: var(--gold);
+  background: rgba(255, 210, 63, 0.12);
+}
+
+.daily-coins {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.menu-row {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.menu-row .btn {
+  flex: 1;
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.quests {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.quest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quest-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.quest-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.quest-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.quest-bar i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  border-radius: 3px;
+}
+
+.quest-progress {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quest-reward {
+  min-width: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.quest-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(84px + var(--safe-top));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid rgba(255, 210, 63, 0.5);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+  animation: toast 2.6s ease-out forwards;
+}
+
+.quest-toast-check {
+  color: var(--gold);
+}
+
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.tabs {
+  width: 100%;
+  display: flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tabs button {
+  flex: 1;
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected='true'] {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.skins {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.skin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.skin.selected {
+  border-color: var(--gold);
+  background: rgba(255, 210, 63, 0.08);
+}
+
+.skin img.locked {
+  filter: grayscale(0.6) brightness(0.8);
+}
+
+.skin-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.skin .btn.buy {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 4px;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.skin-state {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.upgrades {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.upgrade {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.upgrade-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.upgrade-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.upgrade-effect {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.upgrade-pips {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.upgrade-pips i {
+  width: 18px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.upgrade-pips i.on {
+  background: var(--gold);
+}
+
+.btn.buy {
+  width: auto;
+  min-width: 84px;
+  min-height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 16px;
+  color: var(--gold);
+  background: rgba(255, 210, 63, 0.12);
+  border: 1px solid rgba(255, 210, 63, 0.4);
+}
+
+.btn.buy:disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line);
+  cursor: default;
+}
+
+.btn.buy:disabled .coin-icon {
+  filter: grayscale(1);
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.upgrade-max {
+  min-width: 84px;
+  text-align: center;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.wallet-total {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 14px;
+}
+
 .hud-right {
   display: flex;
   align-items: center;
@@ -180,7 +565,7 @@
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
+  overflow-y: auto; /* на низких экранах меню прокручивается, а не обрезается */
   padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
   background: rgba(5, 8, 22, 0.35);
   animation: fade 0.25s ease-out;
@@ -188,6 +573,7 @@
 
 .card {
   width: min(360px, 100%);
+  margin: auto; /* по центру, а если не влезает — прокрутка начинается сверху */
   padding: 28px 22px 24px;
   border-radius: 24px;
   background: var(--card);

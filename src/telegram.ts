@@ -37,7 +37,8 @@ declare global {
   }
 }
 
-const tg = window.Telegram?.WebApp;
+// typeof — чтобы модуль можно было импортировать и в Node (e2e-тесты берут оттуда константы)
+const tg = typeof window === 'undefined' ? undefined : window.Telegram?.WebApp;
 const supports = (version: string) => !!tg?.isVersionAtLeast?.(version);
 
 /** true, если приложение реально открыто внутри Telegram. */
@@ -74,43 +75,45 @@ export const haptic = {
 
 export const backButton = supports('6.1') ? tg?.BackButton : undefined;
 
-// ───── Рекорд: localStorage + облако Telegram (синхронизируется между устройствами) ─────
+// ───── Хранилище: localStorage + облако Telegram (синхронизируется между устройствами) ─────
 
-const BEST_KEY = 'best_score';
 const TUTORIAL_KEY = 'tutorial_seen';
 
-function readLocal(key = BEST_KEY): number {
+const cloudStorage = () => (supports('6.9') ? tg?.CloudStorage : undefined);
+
+export function readLocalString(key: string): string | null {
   try {
-    return Number(localStorage.getItem(key)) || 0;
+    return localStorage.getItem(key);
   } catch {
-    return 0;
+    return null;
   }
 }
 
-function readCloud(key = BEST_KEY): Promise<number> {
-  const cloud = supports('6.9') ? tg?.CloudStorage : undefined;
-  if (!cloud) return Promise.resolve(0);
+/** Значение из облака Telegram; null — нет значения, облака или ответа за 2 секунды. */
+export function readCloudString(key: string): Promise<string | null> {
+  const cloud = cloudStorage();
+  if (!cloud) return Promise.resolve(null);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(0), 2000);
+    const timer = setTimeout(() => resolve(null), 2000);
     cloud.getItem(key, (err, value) => {
       clearTimeout(timer);
-      resolve(err ? 0 : Number(value) || 0);
+      resolve(err || !value ? null : value);
     });
   });
 }
 
-export async function loadBest(): Promise<number> {
-  return Math.max(readLocal(), await readCloud());
-}
-
-export function saveBest(score: number) {
+/** Записать и на устройство, и в облако. */
+export function writeString(key: string, value: string) {
   try {
-    localStorage.setItem(BEST_KEY, String(score));
+    localStorage.setItem(key, value);
   } catch {
     /* хранилище недоступно — не страшно */
   }
-  if (supports('6.9')) tg?.CloudStorage?.setItem(BEST_KEY, String(score));
+  cloudStorage()?.setItem(key, value);
 }
+
+const readLocal = (key: string) => Number(readLocalString(key)) || 0;
+const readCloud = async (key: string) => Number(await readCloudString(key)) || 0;
 
 // ───── Обучение: показываем один раз ─────
 
@@ -122,12 +125,7 @@ export async function loadTutorialSeen(): Promise<boolean> {
 }
 
 export function saveTutorialSeen() {
-  try {
-    localStorage.setItem(TUTORIAL_KEY, '1');
-  } catch {
-    /* хранилище недоступно — не страшно */
-  }
-  if (supports('6.9')) tg?.CloudStorage?.setItem(TUTORIAL_KEY, '1');
+  writeString(TUTORIAL_KEY, '1');
 }
 
 // ───── Настройки: звук, музыка, вибрация ─────
@@ -152,11 +150,5 @@ export async function loadSettings(): Promise<Settings> {
 }
 
 export function saveSettings(s: Settings) {
-  const value = String(encodeSettings(s));
-  try {
-    localStorage.setItem(SETTINGS_KEY, value);
-  } catch {
-    /* хранилище недоступно — не страшно */
-  }
-  if (supports('6.9')) tg?.CloudStorage?.setItem(SETTINGS_KEY, value);
+  writeString(SETTINGS_KEY, String(encodeSettings(s)));
 }

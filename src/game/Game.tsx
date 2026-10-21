@@ -2,7 +2,7 @@ import { extend, useApplication, useTick } from '@pixi/react';
 import { Container, type Ticker } from 'pixi.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { makeTextures } from './textures';
-import { World, type WorldEvents } from './World';
+import { World, type Loadout, type WorldEvents } from './World';
 
 extend({ Container });
 
@@ -13,6 +13,8 @@ interface Props {
   /** Увеличивается при каждом старте — сигнал начать новую игру. */
   session: number;
   events: WorldEvents;
+  /** Улучшения и скин из ангара — применяются при старте партии. */
+  loadout: Loadout;
 }
 
 /**
@@ -25,15 +27,17 @@ export function Game(props: Props) {
 }
 
 /** Мост между React и игровым миром: создаёт World, кормит его тиками и вводом. */
-function GameScene({ phase, session, events }: Props) {
+function GameScene({ phase, session, events, loadout }: Props) {
   const { app } = useApplication();
   const containerRef = useRef<Container>(null);
   const phaseRef = useRef(phase);
   const eventsRef = useRef(events);
+  const loadoutRef = useRef(loadout);
 
   useEffect(() => {
     phaseRef.current = phase;
     eventsRef.current = events;
+    loadoutRef.current = loadout;
   });
 
   const world = useMemo(() => {
@@ -46,6 +50,9 @@ function GameScene({ phase, session, events }: Props) {
       hit: () => ev().hit(),
       kill: (k) => ev().kill(k),
       powerUp: () => ev().powerUp(),
+      coins: (n) => ev().coins(n),
+      wave: (n) => ev().wave(n),
+      bossDown: (f) => ev().bossDown(f),
       gameOver: (s) => ev().gameOver(s),
     });
   }, [app]);
@@ -74,7 +81,7 @@ function GameScene({ phase, session, events }: Props) {
   }, [app, world]);
 
   useEffect(() => {
-    if (session > 0) world.reset();
+    if (session > 0) world.reset(loadoutRef.current);
   }, [session, world]);
 
   useEffect(() => {
