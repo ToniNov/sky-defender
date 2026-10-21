@@ -3,8 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { version } from '../package.json';
 import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
 import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
+import {
+  applyRun,
+  claimQuest,
+  emptyRunStats,
+  questComplete,
+  questReward,
+  questTarget,
+  type Quest,
+  type RunStats,
+} from './quests';
 import { Game, type Phase } from './game/Game';
-import { DAILY, UPGRADE_NAMES, UPGRADES, upgradeMax, type UpgradeName } from './game/balance';
+import { DAILY, UPGRADE_NAMES, UPGRADES, upgradeMax, type QuestKind, type UpgradeName } from './game/balance';
 import type { WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
@@ -24,6 +34,7 @@ import {
 import './App.css';
 
 const TUTORIAL_MAX_MS = 8000;
+const QUEST_TOAST_MS = 2600;
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('menu');
@@ -37,11 +48,13 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | null>(null); // экран поверх меню или паузы
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | null>(null); // экран поверх меню или паузы
   const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
   const progressRef = useRef(progress);
-  const runCoinsRef = useRef(0);
-  const bankedRef = useRef(0); // сколько монет этой партии уже зачислено в прогресс
+  const runRef = useRef<RunStats>(emptyRunStats()); // статистика партии для заданий и монет
+  const bankedRef = useRef<RunStats>(emptyRunStats()); // она же на момент прошлого зачисления в прогресс
+  const toastedRef = useRef(new Set<QuestKind>()); // о каких заданиях уже сказали в этой партии
+  const [questToast, setQuestToast] = useState<Quest | null>(null);
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -69,20 +82,55 @@ export default function App() {
     saveProgress(next);
   }, []);
 
-  /** Зачислить монеты партии и рекорд в сохранение. Можно звать сколько угодно раз — монеты не задвоятся. */
+  /** Зачислить монеты, задания и рекорд партии в сохранение. Можно звать сколько угодно раз — ничего не задвоится. */
   const bank = useCallback(
     (finalScore = 0) => {
       const p = progressRef.current;
-      const coins = runCoinsRef.current - bankedRef.current;
-      if (coins <= 0 && finalScore <= p.best) return;
-      bankedRef.current = runCoinsRef.current;
-      commitProgress({ best: Math.max(p.best, finalScore), coins: p.coins + coins });
+      const run = runRef.current;
+      const coins = run.coins - bankedRef.current.coins;
+      const quests = applyRun(p.quests, run, bankedRef.current);
+      bankedRef.current = { ...run, kills: { ...run.kills } };
+      if (coins <= 0 && finalScore <= p.best && JSON.stringify(quests) === JSON.stringify(p.quests)) return;
+      commitProgress({ best: Math.max(p.best, finalScore), coins: p.coins + coins, quests });
+    },
+    [commitProgress],
+  );
+
+  /** Сказать в бою, что задание выполнено (награду забирают в меню). */
+  const checkQuests = useCallback(() => {
+    const live = applyRun(progressRef.current.quests, runRef.current, bankedRef.current);
+    const q = live.active.find((a) => questComplete(a) && !toastedRef.current.has(a.kind));
+    if (!q) return;
+    toastedRef.current.add(q.kind);
+    const already = progressRef.current.quests.active.find((a) => a.kind === q.kind);
+    if (already && questComplete(already)) return; // было выполнено ещё до партии
+    setQuestToast(q);
+    haptic.notify('success');
+  }, []);
+
+  useEffect(() => {
+    if (!questToast) return;
+    const timer = setTimeout(() => setQuestToast(null), QUEST_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [questToast]);
+
+  const claimQuestAt = useCallback(
+    (i: number) => {
+      const p = progressRef.current;
+      const result = claimQuest(p.quests, i);
+      if (!result) return;
+      commitProgress({ coins: p.coins + result.reward, quests: result.quests });
+      unlockAudio();
+      sfx.powerUp();
+      haptic.notify('success');
     },
     [commitProgress],
   );
 
   const daily = dailyState(progress.daily);
   const dailyAvailable = cloudReady && daily.available;
+
+  const questsReady = progress.quests.active.filter(questComplete).length;
 
   const claimDaily = useCallback(() => {
     const p = progressRef.current;
@@ -114,7 +162,10 @@ export default function App() {
 
   const start = useCallback(() => {
     setNewRecord(false);
-    bankedRef.current = 0;
+    runRef.current = emptyRunStats();
+    bankedRef.current = emptyRunStats();
+    toastedRef.current.clear();
+    setQuestToast(null);
     setTutorial(!tutorialSeenRef.current);
     setSession((s) => s + 1);
     setPhase('playing');
@@ -147,16 +198,42 @@ export default function App() {
   // События из игрового мира → состояние React (HUD) + вибрация
   const events = useMemo<WorldEvents>(
     () => ({
-      score: setScore,
+      score: (n) => {
+        setScore(n);
+        runRef.current.score = n;
+        checkQuests();
+      },
       lives: setLives,
       weapon: setWeapon,
-      combo: setCombo,
+      combo: (m) => {
+        setCombo(m);
+        runRef.current.combo = Math.max(runRef.current.combo, m);
+        checkQuests();
+      },
       hit: () => haptic.impact('heavy'),
-      kill: (kind) => haptic.impact(kind === 'mother' ? 'heavy' : 'light'),
-      powerUp: () => haptic.notify('success'),
+      kill: (kind) => {
+        haptic.impact(kind === 'mother' ? 'heavy' : 'light');
+        const { kills } = runRef.current;
+        kills[kind] = (kills[kind] ?? 0) + 1;
+        checkQuests();
+      },
+      bossDown: (flawless) => {
+        if (flawless) runRef.current.flawlessBosses++;
+        checkQuests();
+      },
+      powerUp: () => {
+        haptic.notify('success');
+        runRef.current.powerUps++;
+        checkQuests();
+      },
       coins: (n) => {
-        runCoinsRef.current = n;
         setRunCoins(n);
+        runRef.current.coins = n;
+        checkQuests();
+      },
+      wave: (n) => {
+        runRef.current.wave = n;
+        checkQuests();
       },
       gameOver: (final) => {
         const record = final > progressRef.current.best;
@@ -166,7 +243,7 @@ export default function App() {
         haptic.notify(record ? 'success' : 'error');
       },
     }),
-    [bank],
+    [bank, checkQuests],
   );
 
   // Подсказка «веди пальцем»: пропадает при первом касании (или через пару секунд) и больше не показывается
@@ -314,9 +391,19 @@ export default function App() {
           <button className="btn primary" onClick={start}>
             Взлететь
           </button>
-          <button className="btn ghost" onClick={() => setOverlay('hangar')}>
-            Ангар
-          </button>
+          <div className="menu-row">
+            <button className="btn ghost" onClick={() => setOverlay('hangar')}>
+              Ангар
+            </button>
+            <button className="btn ghost" onClick={() => setOverlay('quests')}>
+              Задания
+              {questsReady > 0 && (
+                <span className="badge" aria-label={`Готово к получению: ${questsReady}`}>
+                  {questsReady}
+                </span>
+              )}
+            </button>
+          </div>
           {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
           {progress.coins > 0 && (
             <p className="wallet" aria-label={`Монеты: ${progress.coins}`}>
@@ -340,6 +427,16 @@ export default function App() {
       )}
 
       {overlay === 'hangar' && <HangarScreen progress={progress} onBuy={buyUpgrade} onClose={() => setOverlay(null)} />}
+
+      {overlay === 'quests' && (
+        <QuestsScreen quests={progress.quests.active} onClaim={claimQuestAt} onClose={() => setOverlay(null)} />
+      )}
+
+      {questToast && phase === 'playing' && (
+        <div className="quest-toast" role="status">
+          <span className="quest-toast-check">✓</span> {questTitle(questToast)}
+        </div>
+      )}
 
       {overlay === 'daily' && dailyAvailable && (
         <DailyScreen streak={daily.streak} onClaim={claimDaily} onClose={() => setOverlay(null)} />
@@ -486,6 +583,74 @@ function HangarScreen({
                   <CoinIcon />
                   {cost}
                 </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
+  );
+}
+
+/** Русское склонение после числа: 1 монету, 2 монеты, 5 монет. */
+function plural(n: number, one: string, few: string, many: string) {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return one;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return few;
+  return many;
+}
+
+const QUEST_TITLE: Record<QuestKind, (n: number) => string> = {
+  scout: (n) => `Сбей ${n} ${plural(n, 'разведчика', 'разведчиков', 'разведчиков')}`,
+  saucer: (n) => `Сбей ${n} ${plural(n, 'тарелку', 'тарелки', 'тарелок')}`,
+  kamikaze: (n) => `Сбей ${n} камикадзе`,
+  shielder: (n) => `Сбей ${n} ${plural(n, 'щитоносца', 'щитоносцев', 'щитоносцев')}`,
+  splitter: (n) => `Сбей ${n} ${plural(n, 'сплиттера', 'сплиттеров', 'сплиттеров')}`,
+  boss: (n) => (n === 1 ? 'Сбей флагмана' : `Сбей ${n} ${plural(n, 'флагмана', 'флагманов', 'флагманов')}`),
+  flawlessBoss: (n) =>
+    `${n === 1 ? 'Сбей флагмана' : `Сбей ${n} ${plural(n, 'флагмана', 'флагманов', 'флагманов')}`}, не потеряв жизни`,
+  coins: (n) => `Собери ${n} ${plural(n, 'монету', 'монеты', 'монет')}`,
+  powerUps: (n) => `Подбери ${n} ${plural(n, 'бонус', 'бонуса', 'бонусов')}`,
+  wave: (n) => `Дойди до волны ${n} за партию`,
+  score: (n) => `Набери ${n} ${plural(n, 'очко', 'очка', 'очков')} за партию`,
+  combo: (n) => `Разгони комбо до ×${n}`,
+};
+
+const questTitle = (q: Quest) => QUEST_TITLE[q.kind](questTarget(q));
+
+function QuestsScreen({ quests, onClaim, onClose }: { quests: Quest[]; onClaim: (i: number) => void; onClose: () => void }) {
+  return (
+    <Screen>
+      <h2 className="title small">Задания</h2>
+      <ul className="quests">
+        {quests.map((q, i) => {
+          const target = questTarget(q);
+          const title = questTitle(q);
+          return (
+            <li className="quest" key={q.kind}>
+              <div className="quest-text">
+                <span className="quest-title">{title}</span>
+                <span className="quest-bar" role="progressbar" aria-label={title} aria-valuenow={q.progress} aria-valuemax={target}>
+                  <i style={{ width: `${(q.progress / target) * 100}%` }} />
+                </span>
+                <span className="quest-progress">
+                  {q.progress} / {target}
+                </span>
+              </div>
+              {questComplete(q) ? (
+                <button className="btn buy" onClick={() => onClaim(i)} aria-label={`Забрать награду: ${title}`}>
+                  <CoinIcon />
+                  {questReward(q)}
+                </button>
+              ) : (
+                <span className="quest-reward" aria-label={`Награда ${questReward(q)}`}>
+                  <CoinIcon />
+                  {questReward(q)}
+                </span>
               )}
             </li>
           );

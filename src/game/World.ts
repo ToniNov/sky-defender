@@ -42,6 +42,10 @@ export interface WorldEvents {
   powerUp(): void;
   /** Монет собрано за партию. */
   coins(n: number): void;
+  /** Началась волна n. */
+  wave(n: number): void;
+  /** Сбит флагман; flawless — игрок не потерял ни одной жизни, пока тот был на поле. */
+  bossDown(flawless: boolean): void;
   gameOver(score: number): void;
 }
 
@@ -65,6 +69,7 @@ interface Enemy {
   stopY: number;
   shots: number; // босс: сколько пуль осталось в очереди
   inFormation: boolean; // разведчик в строю не доворачивает на игрока, иначе строй слипается
+  flawless: boolean; // босс: игрок ещё не терял жизнь, пока он на поле
 }
 type BossAttack = 'fan' | 'burst' | 'homing';
 interface Missile {
@@ -546,6 +551,7 @@ export class World {
     }
     this.lives--;
     this.ev.lives(this.lives);
+    for (const e of this.enemies) e.flawless = false;
     if (this.combo > 0) {
       this.combo = 0;
       this.ev.combo(1);
@@ -581,6 +587,7 @@ export class World {
     this.waveTimer = WAVES.introTime;
     this.waveBanner = WAVES.introTime;
     this.waveText.text = `ВОЛНА ${n}`;
+    this.ev.wave(n);
   }
 
   /** Построения вылетают по очереди; когда все вылетели и поле опустело — следующая волна. */
@@ -736,6 +743,7 @@ export class World {
       stopY: kind === 'kamikaze' ? randIn(ENEMY.kamikaze.stopAt) * this.h : 0,
       shots: 0,
       inFormation: false,
+      flawless: true,
     };
     if (kind === 'mother') {
       e.bar = new Graphics();
@@ -984,6 +992,7 @@ export class World {
     this.score += points;
     this.ev.score(this.score);
     this.ev.kill(e.kind);
+    if (big) this.ev.bossDown(e.flawless);
     this.spawnPopup(x, y - e.r, `+${points}`, color);
 
     if (big) {

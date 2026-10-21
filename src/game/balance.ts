@@ -197,6 +197,33 @@ export const DAILY = {
   rewards: [10, 15, 20, 30, 40, 50, 80],
 } as const;
 
+/**
+ * Задания: одновременно активны QUESTS.active штук. Выполнил и забрал награду —
+ * на место приходит задание того типа, что выполнялся реже всего, и каждое повторение сложнее.
+ * Цель = target + targetStep × сколько раз уже выполнял, награда — так же.
+ * Счётчики врагов и монет кратны 5, чтобы подписи склонялись одинаково.
+ */
+export const QUESTS = {
+  active: 3,
+  kinds: {
+    scout: { target: 40, targetStep: 20, reward: 20, rewardStep: 10 }, // сбить разведчиков (за всё время)
+    saucer: { target: 15, targetStep: 10, reward: 25, rewardStep: 10 },
+    kamikaze: { target: 10, targetStep: 5, reward: 25, rewardStep: 10 },
+    shielder: { target: 5, targetStep: 5, reward: 30, rewardStep: 10 },
+    splitter: { target: 10, targetStep: 5, reward: 25, rewardStep: 10 },
+    boss: { target: 1, targetStep: 1, reward: 40, rewardStep: 20 },
+    flawlessBoss: { target: 1, targetStep: 1, reward: 60, rewardStep: 30 }, // флагман без потери жизни
+    coins: { target: 30, targetStep: 30, reward: 20, rewardStep: 10 },
+    powerUps: { target: 10, targetStep: 10, reward: 20, rewardStep: 10 },
+    wave: { target: 5, targetStep: 2, reward: 30, rewardStep: 15 }, // за одну партию
+    score: { target: 1500, targetStep: 1500, reward: 30, rewardStep: 15 }, // за одну партию
+    combo: { target: 3, targetStep: 1, max: 5, reward: 25, rewardStep: 15 }, // за одну партию, не больше COMBO.maxMultiplier
+  },
+} as const;
+
+export type QuestKind = keyof typeof QUESTS.kinds;
+export const QUEST_KINDS = Object.keys(QUESTS.kinds) as QuestKind[];
+
 export type PowerUpKind = keyof typeof POWER_UP.drops;
 
 /** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { COINS } from '../src/game/balance.ts';
 import { movePlayer, pickUp, setCheats, snapshot, spawnEnemy, startGame } from './helpers.ts';
+import { SAVE_VERSION } from '../src/progress.ts';
 
 function spawnCoin(page: Page, x: number, y: number) {
   return page.evaluate(([cx, cy]) => window.__world!.spawnCoin(cx, cy), [x, y] as const);
@@ -91,7 +92,7 @@ test('старый рекорд переезжает в новое сохран�
   await collectCoin(page);
   await pauseToMenu(page);
   await expect(page.getByText('Рекорд: 500')).toBeVisible();
-  expect(await savedProgress(page)).toMatchObject({ v: 3, best: 500, coins: 1, upgrades: { fireRate: 0 } });
+  expect(await savedProgress(page)).toMatchObject({ v: SAVE_VERSION, best: 500, coins: 1, upgrades: { fireRate: 0 } });
 });
 
 test('сохранение из новой версии игры не теряет незнакомые поля', async ({ page }) => {

@@ -171,6 +171,126 @@
   color: var(--ink);
 }
 
+.menu-row {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.menu-row .btn {
+  flex: 1;
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.quests {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.quest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quest-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.quest-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.quest-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.quest-bar i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  border-radius: 3px;
+}
+
+.quest-progress {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quest-reward {
+  min-width: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.quest-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(84px + var(--safe-top));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid rgba(255, 210, 63, 0.5);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+  animation: toast 2.6s ease-out forwards;
+}
+
+.quest-toast-check {
+  color: var(--gold);
+}
+
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .upgrades {
   width: 100%;
   margin: 0;

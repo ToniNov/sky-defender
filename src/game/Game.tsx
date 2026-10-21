@@ -52,6 +52,8 @@ function GameScene({ phase, session, events, upgrades }: Props) {
       kill: (k) => ev().kill(k),
       powerUp: () => ev().powerUp(),
       coins: (n) => ev().coins(n),
+      wave: (n) => ev().wave(n),
+      bossDown: (f) => ev().bossDown(f),
       gameOver: (s) => ev().gameOver(s),
     });
   }, [app]);

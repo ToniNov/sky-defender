@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DAILY } from '../src/game/balance.ts';
+import { SAVE_VERSION } from '../src/progress.ts';
 
 const TODAY = '2026-10-21';
 const YESTERDAY = '2026-10-20';
@@ -75,7 +76,7 @@ test('сохранение версии 2 получает пустую сери
   await page.reload();
   await claim(page);
   expect(await saved(page)).toMatchObject({
-    v: 3,
+    v: SAVE_VERSION,
     best: 9,
     coins: 7 + DAILY.rewards[0],
     upgrades: { magnet: 1 },

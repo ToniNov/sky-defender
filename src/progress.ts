@@ -1,5 +1,6 @@
 import { isDayKey, NO_DAILY, type Daily } from './daily';
-import { NO_UPGRADES, UPGRADE_NAMES, upgradeMax, type Upgrades } from './game/balance';
+import { NO_UPGRADES, QUESTS, UPGRADE_NAMES, upgradeMax, type QuestKind, type Upgrades } from './game/balance';
+import { fillQuests, questTarget, type Quest, type Quests } from './quests';
 import { readCloudString, readLocalString, writeString } from './telegram';
 
 /**
@@ -17,13 +18,14 @@ export interface Progress {
   upgrades: Upgrades;
   /** Серия ежедневных наград. */
   daily: Daily;
+  quests: Quests;
   /** Время последнего сохранения (мс): из облака и устройства берём более свежее. */
   t: number;
 }
 
 type Raw = Record<string, unknown>;
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const KEY = 'progress';
 const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд лежал отдельным числом
 
@@ -32,11 +34,30 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   0: (d) => ({ ...d, coins: 0 }),
   1: (d) => ({ ...d, upgrades: {} }),
   2: (d) => ({ ...d, daily: { last: '', streak: 0 } }),
+  3: (d) => ({ ...d, quests: { active: [], done: {} } }),
 };
 
-export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, t: 0 };
+export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, quests: fillQuests({ active: [], done: {} }), t: 0 };
 
 const count = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
+
+const isQuestKind = (k: unknown): k is QuestKind => typeof k === 'string' && k in QUESTS.kinds;
+const asObject = (x: unknown): Raw => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Raw) : {});
+
+/** Задания незнакомых типов (из более новой версии игры) отбрасываем — на их место встанут известные. */
+function parseQuests(x: unknown): Quests {
+  const raw = asObject(x);
+  const done: Quests['done'] = {};
+  for (const [kind, n] of Object.entries(asObject(raw.done))) if (isQuestKind(kind)) done[kind] = count(n);
+  const active: Quest[] = [];
+  for (const item of Array.isArray(raw.active) ? raw.active : []) {
+    const q = asObject(item);
+    if (!isQuestKind(q.kind) || active.some((a) => a.kind === q.kind)) continue;
+    const quest = { kind: q.kind, tier: count(q.tier), progress: 0 };
+    active.push({ ...quest, progress: Math.min(questTarget(quest), count(q.progress)) });
+  }
+  return fillQuests({ active: active.slice(0, QUESTS.active), done });
+}
 
 /**
  * Поля, о которых эта версия игры не знает (их записала более новая версия, например на другом устройстве),
@@ -71,7 +92,7 @@ function parse(json: string | null, legacyBest: string | null): Raw | null {
 
 function toProgress(d: Raw | null): Progress {
   if (!d) return EMPTY_PROGRESS;
-  const { v, best, coins, upgrades, daily, t, ...rest } = d;
+  const { v, best, coins, upgrades, daily, quests, t, ...rest } = d;
   unknownFields = { ...unknownFields, ...rest };
   storedVersion = Math.max(storedVersion, count(v));
   const raw: Raw = upgrades && typeof upgrades === 'object' ? (upgrades as Raw) : {};
@@ -85,6 +106,7 @@ function toProgress(d: Raw | null): Progress {
     coins: count(coins),
     upgrades: known,
     daily: { last, streak: last ? count(dl.streak) : 0 },
+    quests: parseQuests(quests),
     t: count(t),
   };
 }
@@ -116,6 +138,7 @@ export function saveProgress(p: Progress) {
       coins: p.coins,
       upgrades: { ...unknownUpgrades, ...p.upgrades },
       daily: p.daily,
+      quests: p.quests,
       t: p.t,
     }),
   );

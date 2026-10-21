@@ -37,7 +37,8 @@ declare global {
   }
 }
 
-const tg = window.Telegram?.WebApp;
+// typeof — чтобы модуль можно было импортировать и в Node (e2e-тесты берут оттуда константы)
+const tg = typeof window === 'undefined' ? undefined : window.Telegram?.WebApp;
 const supports = (version: string) => !!tg?.isVersionAtLeast?.(version);
 
 /** true, если приложение реально открыто внутри Telegram. */

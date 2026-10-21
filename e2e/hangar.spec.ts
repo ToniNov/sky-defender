@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { PLAYER, POWER_UP, UPGRADES } from '../src/game/balance.ts';
 import { pickUp, snapshot } from './helpers.ts';
+import { SAVE_VERSION } from '../src/progress.ts';
 
 /** Открыть игру с заданным сохранением (только при первом заходе — покупки переживают перезагрузку). */
 async function openWithSave(page: Page, save: Record<string, unknown>) {
@@ -82,5 +83,5 @@ test('сохранение версии 1 получает пустые улуч
   await expect(page.getByLabel('Монеты: 50')).toBeVisible();
   await buyButton(page, 'Скорострельность').click();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('progress')!));
-  expect(saved).toMatchObject({ v: 3, best: 70, coins: 50 - UPGRADES.fireRate.costs[0], upgrades: { fireRate: 1, magnet: 0 } });
+  expect(saved).toMatchObject({ v: SAVE_VERSION, best: 70, coins: 50 - UPGRADES.fireRate.costs[0], upgrades: { fireRate: 1, magnet: 0 } });
 });
