@@ -192,6 +192,11 @@ export const UPGRADE_NAMES = Object.keys(UPGRADES) as UpgradeName[];
 export const NO_UPGRADES: Upgrades = { fireRate: 0, startWeapon: 0, extraLife: 0, magnet: 0 };
 export const upgradeMax = (name: UpgradeName) => UPGRADES[name].costs.length;
 
+/** Ежедневная награда: монеты за вход несколько дней подряд, после последнего дня — снова с первого. Пропуск дня сбрасывает серию. */
+export const DAILY = {
+  rewards: [10, 15, 20, 30, 40, 50, 80],
+} as const;
+
 export type PowerUpKind = keyof typeof POWER_UP.drops;
 
 /** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */

@@ -1,9 +1,10 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
-import { music, setAudioEnabled, unlockAudio } from './audio';
+import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
+import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
 import { Game, type Phase } from './game/Game';
-import { UPGRADE_NAMES, UPGRADES, upgradeMax, type UpgradeName } from './game/balance';
+import { DAILY, UPGRADE_NAMES, UPGRADES, upgradeMax, type UpgradeName } from './game/balance';
 import type { WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
@@ -36,7 +37,8 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [overlay, setOverlay] = useState<'settings' | 'hangar' | null>(null); // экран поверх меню или паузы
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | null>(null); // экран поверх меню или паузы
+  const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
   const progressRef = useRef(progress);
   const runCoinsRef = useRef(0);
   const bankedRef = useRef(0); // сколько монет этой партии уже зачислено в прогресс
@@ -56,6 +58,7 @@ export default function App() {
       const merged = mergeProgress(progressRef.current, cloud);
       progressRef.current = merged;
       setProgress(merged);
+      setCloudReady(true);
     });
   }, []);
 
@@ -77,6 +80,21 @@ export default function App() {
     },
     [commitProgress],
   );
+
+  const daily = dailyState(progress.daily);
+  const dailyAvailable = cloudReady && daily.available;
+
+  const claimDaily = useCallback(() => {
+    const p = progressRef.current;
+    const today = dayKey();
+    const { available, streak } = dailyState(p.daily, today);
+    if (!available) return;
+    commitProgress({ coins: p.coins + dailyReward(streak), daily: { last: today, streak } });
+    unlockAudio();
+    sfx.powerUp();
+    haptic.notify('success');
+    setOverlay(null);
+  }, [commitProgress]);
 
   const buyUpgrade = useCallback(
     (name: UpgradeName) => {
@@ -287,6 +305,12 @@ export default function App() {
           <p className="subtitle">
             {userName ? `Пилот ${userName}, пришельцы атакуют!` : 'Пришельцы атакуют. Только ты можешь их остановить!'}
           </p>
+          {dailyAvailable && (
+            <button className="btn gift" onClick={() => setOverlay('daily')}>
+              🎁 Награда дня: <CoinIcon />
+              {dailyReward(daily.streak)}
+            </button>
+          )}
           <button className="btn primary" onClick={start}>
             Взлететь
           </button>
@@ -316,6 +340,10 @@ export default function App() {
       )}
 
       {overlay === 'hangar' && <HangarScreen progress={progress} onBuy={buyUpgrade} onClose={() => setOverlay(null)} />}
+
+      {overlay === 'daily' && dailyAvailable && (
+        <DailyScreen streak={daily.streak} onClaim={claimDaily} onClose={() => setOverlay(null)} />
+      )}
 
       {phase === 'paused' && !overlay && (
         <Screen>
@@ -465,6 +493,35 @@ function HangarScreen({
       </ul>
       <button className="btn primary" onClick={onClose}>
         Готово
+      </button>
+    </Screen>
+  );
+}
+
+function DailyScreen({ streak, onClaim, onClose }: { streak: number; onClaim: () => void; onClose: () => void }) {
+  const slot = dailySlot(streak);
+  return (
+    <Screen>
+      <h2 className="title small">Награда дня</h2>
+      <p className="subtitle">Заходи каждый день — награда растёт. Пропустишь день — серия начнётся заново.</p>
+      <ol className="daily-days">
+        {DAILY.rewards.map((coins, i) => (
+          <li
+            key={i}
+            className={i < slot ? 'done' : i === slot ? 'today' : ''}
+            aria-label={`День ${i + 1}: ${coins}${i < slot ? ', получено' : i === slot ? ', сегодня' : ''}`}
+          >
+            <span className="daily-day">{i < slot ? '✓' : `День ${i + 1}`}</span>
+            <CoinIcon />
+            <span className="daily-coins">{coins}</span>
+          </li>
+        ))}
+      </ol>
+      <button className="btn primary" onClick={onClaim}>
+        Забрать {dailyReward(streak)}
+      </button>
+      <button className="btn ghost" onClick={onClose}>
+        Позже
       </button>
     </Screen>
   );

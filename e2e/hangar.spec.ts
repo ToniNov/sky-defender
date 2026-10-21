@@ -82,5 +82,5 @@ test('сохранение версии 1 получает пустые улуч
   await expect(page.getByLabel('Монеты: 50')).toBeVisible();
   await buyButton(page, 'Скорострельность').click();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('progress')!));
-  expect(saved).toMatchObject({ v: 2, best: 70, coins: 50 - UPGRADES.fireRate.costs[0], upgrades: { fireRate: 1, magnet: 0 } });
+  expect(saved).toMatchObject({ v: 3, best: 70, coins: 50 - UPGRADES.fireRate.costs[0], upgrades: { fireRate: 1, magnet: 0 } });
 });

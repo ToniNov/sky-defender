@@ -108,6 +108,69 @@
   color: var(--gold);
 }
 
+.btn.gift {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
+  font-size: 16px;
+  color: var(--gold);
+  background: rgba(255, 210, 63, 0.12);
+  border: 1px solid rgba(255, 210, 63, 0.5);
+  animation: gift-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes gift-glow {
+  50% {
+    box-shadow: 0 0 18px rgba(255, 210, 63, 0.45);
+  }
+}
+
+.daily-days {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.daily-days li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* седьмой день — во всю ширину последнего ряда */
+.daily-days li:last-child {
+  grid-column: span 2;
+}
+
+.daily-days li.done {
+  opacity: 0.5;
+}
+
+.daily-days li.today {
+  color: var(--gold);
+  border-color: var(--gold);
+  background: rgba(255, 210, 63, 0.12);
+}
+
+.daily-coins {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+}
+
 .upgrades {
   width: 100%;
   margin: 0;
@@ -303,7 +366,7 @@
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
+  overflow-y: auto; /* на низких экранах меню прокручивается, а не обрезается */
   padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
   background: rgba(5, 8, 22, 0.35);
   animation: fade 0.25s ease-out;
@@ -311,6 +374,7 @@
 
 .card {
   width: min(360px, 100%);
+  margin: auto; /* по центру, а если не влезает — прокрутка начинается сверху */
   padding: 28px 22px 24px;
   border-radius: 24px;
   background: var(--card);

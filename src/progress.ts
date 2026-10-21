@@ -1,3 +1,4 @@
+import { isDayKey, NO_DAILY, type Daily } from './daily';
 import { NO_UPGRADES, UPGRADE_NAMES, upgradeMax, type Upgrades } from './game/balance';
 import { readCloudString, readLocalString, writeString } from './telegram';
 
@@ -14,13 +15,15 @@ export interface Progress {
   coins: number;
   /** Уровни улучшений из ангара. */
   upgrades: Upgrades;
+  /** Серия ежедневных наград. */
+  daily: Daily;
   /** Время последнего сохранения (мс): из облака и устройства берём более свежее. */
   t: number;
 }
 
 type Raw = Record<string, unknown>;
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 const KEY = 'progress';
 const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд лежал отдельным числом
 
@@ -28,9 +31,10 @@ const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд леж
 const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   0: (d) => ({ ...d, coins: 0 }),
   1: (d) => ({ ...d, upgrades: {} }),
+  2: (d) => ({ ...d, daily: { last: '', streak: 0 } }),
 };
 
-export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, t: 0 };
+export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, t: 0 };
 
 const count = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
 
@@ -67,14 +71,22 @@ function parse(json: string | null, legacyBest: string | null): Raw | null {
 
 function toProgress(d: Raw | null): Progress {
   if (!d) return EMPTY_PROGRESS;
-  const { v, best, coins, upgrades, t, ...rest } = d;
+  const { v, best, coins, upgrades, daily, t, ...rest } = d;
   unknownFields = { ...unknownFields, ...rest };
   storedVersion = Math.max(storedVersion, count(v));
   const raw: Raw = upgrades && typeof upgrades === 'object' ? (upgrades as Raw) : {};
   const known = { ...NO_UPGRADES };
   for (const name of UPGRADE_NAMES) known[name] = Math.min(upgradeMax(name), count(raw[name]));
   for (const [name, level] of Object.entries(raw)) if (!(name in known)) unknownUpgrades[name] = level;
-  return { best: count(best), coins: count(coins), upgrades: known, t: count(t) };
+  const dl: Raw = daily && typeof daily === 'object' ? (daily as Raw) : {};
+  const last = isDayKey(dl.last) ? dl.last : '';
+  return {
+    best: count(best),
+    coins: count(coins),
+    upgrades: known,
+    daily: { last, streak: last ? count(dl.streak) : 0 },
+    t: count(t),
+  };
 }
 
 /** Из двух копий берём более свежую, а рекорд — лучший из обеих. */
@@ -103,6 +115,7 @@ export function saveProgress(p: Progress) {
       best: p.best,
       coins: p.coins,
       upgrades: { ...unknownUpgrades, ...p.upgrades },
+      daily: p.daily,
       t: p.t,
     }),
   );
