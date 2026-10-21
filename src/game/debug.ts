@@ -12,6 +12,8 @@ export interface DebugObject {
 
 export interface DebugEnemy extends DebugObject {
   hp: number;
+  /** У босса — текущая или ближайшая атака. */
+  attack?: string;
 }
 
 export interface DebugSnapshot {
@@ -28,6 +30,7 @@ export interface DebugSnapshot {
   player: { x: number; y: number };
   enemies: DebugEnemy[];
   powerUps: DebugObject[];
+  missiles: DebugObject[];
   enemyBullets: number;
 }
 
@@ -37,7 +40,11 @@ export interface WorldDebug {
   setAutoSpawn(on: boolean): void;
   spawnEnemy(kind: string, x: number, y: number): void;
   spawnPowerUp(kind: string, x: number, y: number): void;
+  /** Самонаводящийся снаряд босса, летит вниз. */
+  spawnMissile(x: number, y: number): void;
   movePlayer(x: number, y: number): void;
+  /** Читы для тестов: игрок не получает урон / не стреляет. Сбрасываются при новой игре. */
+  setCheats(cheats: { noDamage?: boolean; holdFire?: boolean }): void;
 }
 
 declare global {

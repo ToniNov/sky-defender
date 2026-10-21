@@ -57,9 +57,26 @@ export const ENEMY = {
     points: 150,
     speed: 60,
     firstShot: 1.5,
-    fireInterval: 1.2,
-    bulletSpeed: 210,
-    spread: [-0.35, 0, 0.35], // углы веера, рад
+    attackPause: 1.1, // пауза между атаками (атаки идут по кругу: веер → очередь → ракеты)
+    windup: 0.45, // перед атакой босс подсвечивается её цветом
+    fan: {
+      count: 9, // пуль в веере, летят вниз с просветами
+      spread: 1.7, // ширина веера, рад
+      speed: 190,
+    },
+    burst: {
+      count: 6, // прицельная очередь
+      interval: 0.1,
+      speed: 270,
+      jitter: 0.06, // разброс, рад
+    },
+    homing: {
+      count: 2,
+      speed: 170,
+      turnRate: 2.2, // поворот к игроку, рад/с
+      homingTime: 2.6, // потом летит по прямой
+      r: 8,
+    },
   },
   kamikaze: {
     hp: 1,

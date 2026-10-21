@@ -40,10 +40,18 @@ interface Enemy {
   fireCd: number;
   flash: number;
   bar?: Graphics;
-  /** Камикадзе: 0 — заходит на позицию, 1 — целится, 2 — таранит. */
+  /** Камикадзе: 0 — заходит на позицию, 1 — целится, 2 — таранит. Босс: номер атаки по кругу. */
   phase: number;
   timer: number;
   stopY: number;
+  shots: number; // босс: сколько пуль осталось в очереди
+}
+type BossAttack = 'fan' | 'burst' | 'homing';
+interface Missile {
+  s: Sprite;
+  vx: number;
+  vy: number;
+  homing: number; // сколько ещё доворачивает на игрока
 }
 interface Bullet {
   s: Sprite;
@@ -81,6 +89,14 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   splitter: 0xff8fd8,
   mini: 0xff8fd8,
 };
+const BOSS_ATTACKS: readonly BossAttack[] = ['fan', 'burst', 'homing'];
+/** Подсветка босса перед атакой — по цвету видно, что сейчас прилетит. */
+const BOSS_WINDUP_TINT: Record<BossAttack, number> = {
+  fan: 0xff8fa8,
+  burst: 0xffe066,
+  homing: 0x7fffd4,
+};
+const MISSILE_COLOR = 0x7fffd4;
 const KAMIKAZE_AIM_TINT = 0xffff66; // мигание перед тараном
 const DEFLECT_COLOR = 0xdfe6f2; // искры от щита щитоносца
 
@@ -116,6 +132,8 @@ const near = (a: Container, b: Container, d: number) => {
   const dy = a.y - b.y;
   return dx * dx + dy * dy < d * d;
 };
+
+const bossAttack = (e: Enemy) => BOSS_ATTACKS[e.phase % BOSS_ATTACKS.length];
 
 /** Быстрое удаление из массива без сдвига (порядок не важен). */
 function removeAt<T extends { s: Container }>(arr: T[], i: number) {
@@ -199,6 +217,7 @@ export class World {
   private enemyBullets: Bullet[] = [];
   private particles: Particle[] = [];
   private powerUps: PowerUp[] = [];
+  private missiles: Missile[] = [];
   private popups: Popup[] = [];
 
   private w = 0;
@@ -221,6 +240,7 @@ export class World {
   private magnet = 0; // сколько ещё действует магнит
   private flash = 0; // остаток вспышки от бомбы
   private autoSpawn = true; // e2e-тесты выключают случайных врагов
+  private cheats = { noDamage: false, holdFire: false }; // тоже только для тестов
 
   constructor(textures: Textures, events: WorldEvents) {
     this.tx = textures;
@@ -297,7 +317,7 @@ export class World {
   /** Убрать всё с поля (для главного меню). */
   clear() {
     for (const e of this.enemies) e.bar?.destroy();
-    for (const list of [this.enemies, this.powerUps, this.popups]) {
+    for (const list of [this.enemies, this.powerUps, this.missiles, this.popups]) {
       while (list.length) removeAt(list as { s: Container }[], list.length - 1);
     }
     while (this.bullets.length) releaseAt(this.bullets, this.bullets.length - 1, this.bulletPool);
@@ -329,6 +349,7 @@ export class World {
     this.shake = 0;
     this.alive = true;
     this.autoSpawn = true;
+    this.cheats = { noDamage: false, holdFire: false };
     this.player.visible = true;
     this.player.position.set(this.w / 2, this.h - 120);
     this.ev.score(0);
@@ -381,6 +402,7 @@ export class World {
     this.updateBullets(dt);
     this.updateEnemies(dt, diff);
     this.updateEnemyBullets(dt);
+    this.updateMissiles(dt);
     this.updatePowerUps(dt);
     this.updateParticles(dt);
     this.updatePopups(dt);
@@ -430,7 +452,7 @@ export class World {
     }
 
     this.fireCd -= dt;
-    if (this.fireCd <= 0) {
+    if (this.fireCd <= 0 && !this.cheats.holdFire) {
       this.fire();
       this.fireCd = PLAYER.fireInterval;
     }
@@ -454,6 +476,7 @@ export class World {
   }
 
   private damagePlayer() {
+    if (this.cheats.noDamage) return;
     const { x, y } = this.player;
     if (this.shield) {
       // щит принимает удар: жизнь, пушка и комбо остаются
@@ -571,6 +594,7 @@ export class World {
       phase: 0,
       timer: 0,
       stopY: kind === 'kamikaze' ? randIn(ENEMY.kamikaze.stopAt) * this.h : 0,
+      shots: 0,
     };
     if (kind === 'mother') {
       e.bar = new Graphics();
@@ -631,24 +655,24 @@ export class World {
         if ((s.x < e.r && e.vx < 0) || (s.x > this.w - e.r && e.vx > 0)) e.vx = -e.vx;
       }
 
-      const shoots = e.kind === 'mother' || (e.kind === 'saucer' && this.elapsed > ENEMY.saucer.shootsAfter);
-      if (this.alive && shoots && s.y > 0) {
-        e.fireCd -= dt;
-        if (e.fireCd <= 0) {
-          if (e.kind === 'saucer') {
+      if (this.alive && s.y > 0) {
+        if (e.kind === 'saucer' && this.elapsed > ENEMY.saucer.shootsAfter) {
+          e.fireCd -= dt;
+          if (e.fireCd <= 0) {
             const { saucer } = ENEMY;
             this.enemyShoot(s.x, s.y + 14, 0, saucer.bulletSpeed + this.elapsed);
             e.fireCd = randIn(saucer.fireInterval) / diff;
-          } else {
-            const { mother } = ENEMY;
-            for (const a of mother.spread) this.enemyShoot(s.x, s.y + 24, a, mother.bulletSpeed);
-            e.fireCd = mother.fireInterval;
           }
+        } else if (e.kind === 'mother') {
+          this.updateBossAttack(e, dt);
         }
       }
 
       e.flash = Math.max(0, e.flash - dt);
       s.tint = e.flash > 0 ? 0xff7777 : 0xffffff;
+      if (e.kind === 'mother' && e.flash <= 0 && e.shots === 0 && e.fireCd < ENEMY.mother.windup) {
+        s.tint = BOSS_WINDUP_TINT[bossAttack(e)];
+      }
       if (e.kind === 'kamikaze' && e.phase === 1 && Math.floor(e.timer * 12) % 2) s.tint = KAMIKAZE_AIM_TINT;
       e.bar?.position.set(s.x, s.y - e.r - 10);
 
@@ -657,6 +681,85 @@ export class World {
         removeAt(this.enemies, i);
       }
     }
+  }
+
+  /** Атаки босса по кругу: веер → очередь → самонаводящиеся снаряды, между ними пауза. */
+  private updateBossAttack(e: Enemy, dt: number) {
+    const { mother } = ENEMY;
+    const x = e.s.x;
+    const y = e.s.y + 24;
+    e.fireCd -= dt;
+    if (e.fireCd > 0) return;
+
+    if (e.shots > 0) {
+      // идёт очередь
+      this.enemyShoot(x, y, rand(-1, 1) * mother.burst.jitter, mother.burst.speed);
+      e.shots--;
+      if (e.shots > 0) e.fireCd = mother.burst.interval;
+      else this.nextBossAttack(e);
+      return;
+    }
+
+    const attack = bossAttack(e);
+    if (attack === 'fan') {
+      // веер вниз, а не в игрока: между пулями есть просветы
+      const { count, spread, speed } = mother.fan;
+      for (let n = 0; n < count; n++) this.enemyShootAt(x, y, Math.PI / 2 + (n / (count - 1) - 0.5) * spread, speed);
+      this.nextBossAttack(e);
+    } else if (attack === 'burst') {
+      e.shots = mother.burst.count;
+      e.fireCd = 0;
+    } else {
+      for (let n = 0; n < mother.homing.count; n++) {
+        const side = n % 2 ? 1 : -1;
+        this.spawnMissile(x + side * 30, y, Math.PI / 2 + side * 0.7);
+      }
+      sfx.missile();
+      this.nextBossAttack(e);
+    }
+  }
+
+  private nextBossAttack(e: Enemy) {
+    e.phase++;
+    e.fireCd = ENEMY.mother.attackPause;
+  }
+
+  private spawnMissile(x: number, y: number, angle: number) {
+    const { speed, homingTime } = ENEMY.mother.homing;
+    const s = new Sprite(this.tx.missile);
+    s.anchor.set(0.5);
+    s.position.set(x, y);
+    this.fxLayer.addChild(s);
+    this.missiles.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, homing: homingTime });
+  }
+
+  private updateMissiles(dt: number) {
+    const { speed, turnRate } = ENEMY.mother.homing;
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      const m = this.missiles[i];
+      let angle = Math.atan2(m.vy, m.vx);
+      if (m.homing > 0 && this.alive) {
+        // доворачиваем к игроку не быстрее turnRate — от снаряда можно увернуться
+        m.homing -= dt;
+        const target = Math.atan2(this.player.y - m.s.y, this.player.x - m.s.x);
+        const diff = Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
+        angle += clamp(diff, -turnRate * dt, turnRate * dt);
+        m.vx = Math.cos(angle) * speed;
+        m.vy = Math.sin(angle) * speed;
+      }
+      m.s.x += m.vx * dt;
+      m.s.y += m.vy * dt;
+      m.s.rotation = angle - Math.PI / 2;
+      const { x, y } = m.s;
+      if (y > this.h + 30 || y < -60 || x < -30 || x > this.w + 30) removeAt(this.missiles, i);
+    }
+  }
+
+  private destroyMissile(i: number) {
+    const { x, y } = this.missiles[i].s;
+    this.explode(x, y, MISSILE_COLOR, 10, 180);
+    sfx.hit();
+    removeAt(this.missiles, i);
   }
 
   private updateKamikaze(e: Enemy, dt: number) {
@@ -754,10 +857,16 @@ export class World {
     return Math.min(COMBO.maxMultiplier, 1 + Math.floor(this.combo / COMBO.killsPerStep));
   }
 
+  /** Выстрел в игрока (со смещением угла). */
   private enemyShoot(x: number, y: number, angleOffset: number, speed: number) {
     const angle = this.alive
       ? Math.atan2(this.player.y - y, this.player.x - x) + angleOffset
       : Math.PI / 2 + angleOffset;
+    this.enemyShootAt(x, y, angle, speed);
+  }
+
+  /** Выстрел под заданным углом (0 — вправо, π/2 — вниз). */
+  private enemyShootAt(x: number, y: number, angle: number, speed: number) {
     const s = this.enemyBulletPool.get();
     s.position.set(x, y);
     this.enemyBullets.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: ENEMY_BULLET_R });
@@ -830,6 +939,7 @@ export class World {
     for (const e of [...this.enemies]) if (e.kind === 'mini') this.destroyEnemy(e, true);
     for (const b of this.enemyBullets) this.explode(b.s.x, b.s.y, 0xff3d6e, 2, 80);
     while (this.enemyBullets.length) releaseAt(this.enemyBullets, this.enemyBullets.length - 1, this.enemyBulletPool);
+    while (this.missiles.length) this.destroyMissile(this.missiles.length - 1);
     this.flash = BOMB_FLASH;
     this.shake = Math.max(this.shake, BOMB_SHAKE);
     sfx.explosion(true);
@@ -922,6 +1032,15 @@ export class World {
       }
     }
 
+    // пули игрока → самонаводящиеся снаряды
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      const j = this.missiles.findIndex((m) => near(b.s, m.s, b.r + ENEMY.mother.homing.r));
+      if (j < 0) continue;
+      releaseAt(this.bullets, i, this.bulletPool);
+      this.destroyMissile(j);
+    }
+
     if (!this.alive) return;
     const vulnerable = this.invuln <= 0;
 
@@ -929,6 +1048,15 @@ export class World {
     for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
       if (vulnerable && near(this.enemyBullets[i].s, this.player, PLAYER.r + 4)) {
         releaseAt(this.enemyBullets, i, this.enemyBulletPool);
+        this.damagePlayer();
+        return;
+      }
+    }
+
+    // самонаводящиеся снаряды → игрок
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      if (vulnerable && near(this.missiles[i].s, this.player, PLAYER.r + ENEMY.mother.homing.r)) {
+        this.destroyMissile(i);
         this.damagePlayer();
         return;
       }
@@ -992,8 +1120,14 @@ export class World {
         shield: this.shield,
         magnet: Math.max(0, this.magnet),
         player: pos(this.player),
-        enemies: this.enemies.map((e) => ({ kind: e.kind, hp: e.hp, ...pos(e.s) })),
+        enemies: this.enemies.map((e) => ({
+          kind: e.kind,
+          hp: e.hp,
+          ...(e.kind === 'mother' ? { attack: bossAttack(e) } : {}),
+          ...pos(e.s),
+        })),
         powerUps: this.powerUps.map((p) => ({ kind: p.kind, ...pos(p.s) })),
+        missiles: this.missiles.map((m) => ({ kind: 'missile', ...pos(m.s) })),
         enemyBullets: this.enemyBullets.length,
       }),
       setAutoSpawn: (on) => {
@@ -1008,6 +1142,10 @@ export class World {
         if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
         this.spawnPowerUp(x, y, kind as PowerUpKind);
       },
+      setCheats: (cheats) => {
+        this.cheats = { ...this.cheats, ...cheats };
+      },
+      spawnMissile: (x, y) => this.spawnMissile(x, y, Math.PI / 2),
       movePlayer: (x, y) => {
         this.player.position.set(x, y);
         this.clampPlayer();

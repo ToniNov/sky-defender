@@ -45,6 +45,16 @@ export function movePlayer(page: Page, x: number, y: number) {
   return page.evaluate(([px, py]) => window.__world!.movePlayer(px, py), [x, y] as const);
 }
 
+export function spawnMissile(page: Page, x: number, y: number) {
+  return page.evaluate(([mx, my]) => window.__world!.spawnMissile(mx, my), [x, y] as const);
+}
+
+export async function setCheats(page: Page, cheats: { noDamage?: boolean; holdFire?: boolean }) {
+  await page.evaluate((c) => window.__world!.setCheats(c), cheats);
+  // пули, выпущенные до прекращения огня, ещё летят — ждём, пока покинут экран
+  if (cheats.holdFire) await page.waitForTimeout(1300);
+}
+
 /** Положить бонус прямо на самолёт и дождаться, пока его подберут. */
 export async function pickUp(page: Page, kind: string) {
   // ждём очки за подбор, а не пустое поле: сбитые бомбой враги сами могут уронить бонус

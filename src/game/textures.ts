@@ -10,6 +10,7 @@ export type TextureName =
   | 'flame'
   | 'bullet'
   | 'enemyBullet'
+  | 'missile'
   | 'scout'
   | 'saucer'
   | 'mother'
@@ -65,6 +66,14 @@ export function makeTextures(renderer: Renderer): Textures {
     enemyBullet: bake((g) => {
       g.circle(6, 6, 6).fill(0xff3d6e);
       g.circle(6, 6, 3).fill(0xffffff);
+    }),
+
+    // Самонаводящийся снаряд босса (носом вниз), его можно сбить
+    missile: bake((g) => {
+      g.circle(9, 9, 9).fill({ color: 0x7fffd4, alpha: 0.25 });
+      g.poly([9, 18, 14, 8, 12, 2, 6, 2, 4, 8]).fill(0x3fbf9f);
+      g.poly([9, 15, 11.5, 8, 9, 4, 6.5, 8]).fill(0x7fffd4);
+      g.circle(9, 9, 1.8).fill(0xffffff);
     }),
 
     // Маленький зелёный пришелец — быстрый, 1 попадание
