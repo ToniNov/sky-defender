@@ -46,6 +46,7 @@ function GameScene({ phase, session, events }: Props) {
       hit: () => ev().hit(),
       kill: (k) => ev().kill(k),
       powerUp: () => ev().powerUp(),
+      coins: (n) => ev().coins(n),
       gameOver: (s) => ev().gameOver(s),
     });
   }, [app]);

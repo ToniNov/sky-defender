@@ -4,15 +4,14 @@ import { version } from '../package.json';
 import { music, setAudioEnabled, unlockAudio } from './audio';
 import { Game, type Phase } from './game/Game';
 import type { WorldEvents } from './game/World';
+import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
   backButton,
   DEFAULT_SETTINGS,
   haptic,
   initTelegram,
-  loadBest,
   loadSettings,
   loadTutorialSeen,
-  saveBest,
   saveSettings,
   saveTutorialSeen,
   setHapticEnabled,
@@ -31,12 +30,15 @@ export default function App() {
   const [lives, setLives] = useState(3);
   const [weapon, setWeapon] = useState(1);
   const [combo, setCombo] = useState(1);
-  const [best, setBest] = useState(0);
+  const [progress, setProgress] = useState<Progress>(loadLocalProgress);
+  const [runCoins, setRunCoins] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const bestRef = useRef(0);
+  const progressRef = useRef(progress);
+  const runCoinsRef = useRef(0);
+  const bankedRef = useRef(0); // сколько монет этой партии уже зачислено в прогресс
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -49,14 +51,33 @@ export default function App() {
     loadTutorialSeen().then((seen) => {
       if (seen) tutorialSeenRef.current = true;
     });
-    loadBest().then((b) => {
-      bestRef.current = Math.max(bestRef.current, b);
-      setBest(bestRef.current);
+    loadCloudProgress().then((cloud) => {
+      const merged = mergeProgress(progressRef.current, cloud);
+      progressRef.current = merged;
+      setProgress(merged);
     });
   }, []);
 
+  /** Зачислить монеты партии и рекорд в сохранение. Можно звать сколько угодно раз — монеты не задвоятся. */
+  const bank = useCallback((finalScore = 0) => {
+    const p = progressRef.current;
+    const coins = runCoinsRef.current - bankedRef.current;
+    if (coins <= 0 && finalScore <= p.best) return;
+    bankedRef.current = runCoinsRef.current;
+    const next = { best: Math.max(p.best, finalScore), coins: p.coins + coins, t: Date.now() };
+    progressRef.current = next;
+    setProgress(next);
+    saveProgress(next);
+  }, []);
+
+  // На паузе и при выходе в меню монеты сохраняем сразу: игру могут закрыть, не доиграв
+  useEffect(() => {
+    if (phase === 'paused' || phase === 'menu') bank();
+  }, [phase, bank]);
+
   const start = useCallback(() => {
     setNewRecord(false);
+    bankedRef.current = 0;
     setTutorial(!tutorialSeenRef.current);
     setSession((s) => s + 1);
     setPhase('playing');
@@ -96,19 +117,19 @@ export default function App() {
       hit: () => haptic.impact('heavy'),
       kill: (kind) => haptic.impact(kind === 'mother' ? 'heavy' : 'light'),
       powerUp: () => haptic.notify('success'),
+      coins: (n) => {
+        runCoinsRef.current = n;
+        setRunCoins(n);
+      },
       gameOver: (final) => {
-        const record = final > bestRef.current;
-        if (record) {
-          bestRef.current = final;
-          setBest(final);
-          saveBest(final);
-        }
+        const record = final > progressRef.current.best;
+        bank(final);
         setNewRecord(record);
         setPhase('over');
         haptic.notify(record ? 'success' : 'error');
       },
     }),
-    [],
+    [bank],
   );
 
   // Подсказка «веди пальцем»: пропадает при первом касании (или через пару секунд) и больше не показывается
@@ -200,6 +221,10 @@ export default function App() {
                 <i key={n} className={n <= weapon ? 'on' : ''} />
               ))}
             </span>
+            <span className="hud-coins" aria-label={`Монеты за партию: ${runCoins}`}>
+              <CoinIcon />
+              {runCoins}
+            </span>
           </div>
           <div className="hud-right">
             <div className="hearts" aria-label={`Жизни: ${lives}`}>
@@ -246,7 +271,13 @@ export default function App() {
           <button className="btn primary" onClick={start}>
             Взлететь
           </button>
-          {best > 0 && <p className="best">Рекорд: {best}</p>}
+          {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
+          {progress.coins > 0 && (
+            <p className="wallet" aria-label={`Монеты: ${progress.coins}`}>
+              <CoinIcon />
+              {progress.coins}
+            </p>
+          )}
           <ul className="hints">
             <li>Веди пальцем по экрану — самолёт летит следом</li>
             <li>Стрельба автоматическая</li>
@@ -283,7 +314,12 @@ export default function App() {
           <h2 className="title small">Самолёт сбит</h2>
           {newRecord && <p className="record">Новый рекорд!</p>}
           <p className="score-big">{score}</p>
-          <p className="best">Рекорд: {best}</p>
+          <p className="best">Рекорд: {progress.best}</p>
+          {runCoins > 0 && (
+            <p className="wallet" aria-label={`Собрано монет: ${runCoins}, всего ${progress.coins}`}>
+              <CoinIcon />+{runCoins} <span className="wallet-total">всего {progress.coins}</span>
+            </p>
+          )}
           <button className="btn primary" onClick={start}>
             Ещё раз
           </button>
@@ -357,6 +393,10 @@ function Heart() {
       <path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.3 2.9 4 6.9 4c2.2 0 3.7 1.2 5.1 3 1.4-1.8 2.9-3 5.1-3 4 0 6.1 4.3 4.5 7.8C19.5 16.4 12 21 12 21z" />
     </svg>
   );
+}
+
+function CoinIcon() {
+  return <i className="coin-icon" aria-hidden />;
 }
 
 function PlaneIcon() {

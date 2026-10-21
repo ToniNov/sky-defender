@@ -21,6 +21,8 @@ export interface DebugSnapshot {
   h: number;
   alive: boolean;
   score: number;
+  /** Монет собрано за партию. */
+  coins: number;
   wave: number;
   lives: number;
   weapon: number;
@@ -31,6 +33,7 @@ export interface DebugSnapshot {
   player: { x: number; y: number };
   enemies: DebugEnemy[];
   powerUps: DebugObject[];
+  coinsOnField: DebugObject[];
   missiles: DebugObject[];
   enemyBullets: number;
 }
@@ -45,6 +48,7 @@ export interface WorldDebug {
   spawnFormation(name: string): void;
   spawnEnemy(kind: string, x: number, y: number): void;
   spawnPowerUp(kind: string, x: number, y: number): void;
+  spawnCoin(x: number, y: number): void;
   /** Самонаводящийся снаряд босса, летит вниз. */
   spawnMissile(x: number, y: number): void;
   movePlayer(x: number, y: number): void;

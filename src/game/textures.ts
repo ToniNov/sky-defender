@@ -26,7 +26,8 @@ export type TextureName =
   | 'magnet'
   | 'bomb'
   | 'shieldBubble'
-  | 'magnetRing';
+  | 'magnetRing'
+  | 'coin';
 
 export type Textures = Record<TextureName, Texture>;
 
@@ -208,6 +209,13 @@ export function makeTextures(renderer: Renderer): Textures {
       g.circle(40, 40, 38).fill({ color: 0x5fd4ff, alpha: 0.12 });
       g.circle(40, 40, 38).stroke({ width: 2.5, color: 0x9be7ff, alpha: 0.85 });
       g.arc(40, 40, 32, -2.5, -1.6).stroke({ width: 3, color: 0xffffff, alpha: 0.6 });
+    }),
+
+    // Монета, ~18×18
+    coin: bake((g) => {
+      g.circle(9, 9, 9).fill(0xe0a100);
+      g.circle(9, 9, 7).fill(0xffd23f);
+      g.roundRect(7.5, 4.5, 3, 9, 1.5).fill(0xfff1a8);
     }),
 
     // Пунктирное кольцо, пока действует магнит

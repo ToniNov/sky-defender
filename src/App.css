@@ -78,6 +78,42 @@
   box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
 }
 
+.hud-coins {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.coin-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff1a8 0 18%, var(--gold) 20% 70%, #e0a100 72%);
+  box-shadow: 0 0 6px rgba(255, 210, 63, 0.5);
+  flex: none;
+}
+
+.wallet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.wallet-total {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 14px;
+}
+
 .hud-right {
   display: flex;
   align-items: center;
