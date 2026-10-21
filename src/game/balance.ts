@@ -114,6 +114,8 @@ export const ENEMY = {
   },
 } as const;
 
+export type EnemyKind = keyof typeof ENEMY;
+
 /** Задержка первого выстрела обычных врагов. */
 export const ENEMY_FIRST_SHOT: readonly [number, number] = [1.2, 3];
 export const ENEMY_BULLET_R = 5;
