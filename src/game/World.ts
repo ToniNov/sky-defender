@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { sfx } from '../audio';
 import { BOSS, COMBO, DIFFICULTY_TIME, ENEMY, ENEMY_BULLET_R, ENEMY_FIRST_SHOT, PLAYER, POWER_UP, SPAWN, WEAPON_PATTERNS, type PowerUpKind } from './balance';
+import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
 
 /**
@@ -219,6 +220,7 @@ export class World {
   private shield = false;
   private magnet = 0; // сколько ещё действует магнит
   private flash = 0; // остаток вспышки от бомбы
+  private autoSpawn = true; // e2e-тесты выключают случайных врагов
 
   constructor(textures: Textures, events: WorldEvents) {
     this.tx = textures;
@@ -326,6 +328,7 @@ export class World {
     this.invuln = PLAYER.startInvuln;
     this.shake = 0;
     this.alive = true;
+    this.autoSpawn = true;
     this.player.visible = true;
     this.player.position.set(this.w / 2, this.h - 120);
     this.ev.score(0);
@@ -362,7 +365,7 @@ export class World {
     if (this.alive) {
       this.updatePlayer(dt);
       this.spawnCd -= dt;
-      if (this.spawnCd <= 0) {
+      if (this.spawnCd <= 0 && this.autoSpawn) {
         this.spawnWave();
         const bossOnField = this.enemies.some((e) => e.kind === 'mother');
         this.spawnCd =
@@ -970,5 +973,45 @@ export class World {
       sfx.powerUp();
       this.explode(x, y, POWER_UP_COLOR[kind], 12, 160);
     }
+  }
+
+  // ───────────── отладка для e2e-тестов ─────────────
+
+  debugApi(): WorldDebug {
+    const pos = (c: Container) => ({ x: c.x, y: c.y });
+    return {
+      snapshot: () => ({
+        w: this.w,
+        h: this.h,
+        alive: this.alive,
+        score: this.score,
+        lives: this.lives,
+        weapon: this.weapon,
+        combo: this.comboMultiplier(),
+        invuln: Math.max(0, this.invuln),
+        shield: this.shield,
+        magnet: Math.max(0, this.magnet),
+        player: pos(this.player),
+        enemies: this.enemies.map((e) => ({ kind: e.kind, hp: e.hp, ...pos(e.s) })),
+        powerUps: this.powerUps.map((p) => ({ kind: p.kind, ...pos(p.s) })),
+        enemyBullets: this.enemyBullets.length,
+      }),
+      setAutoSpawn: (on) => {
+        this.autoSpawn = on;
+      },
+      spawnEnemy: (kind, x, y) => {
+        if (!(kind in ENEMY)) throw new Error(`Нет такого врага: ${kind}`);
+        const e = this.spawn(kind as EnemyKind, x);
+        e.s.y = y;
+      },
+      spawnPowerUp: (kind, x, y) => {
+        if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
+        this.spawnPowerUp(x, y, kind as PowerUpKind);
+      },
+      movePlayer: (x, y) => {
+        this.player.position.set(x, y);
+        this.clampPlayer();
+      },
+    };
   }
 }
