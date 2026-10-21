@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "build:single": "tsc -b && vite build --mode single",
-    "test": "playwright test"
+    "test": "vitest run && playwright test",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@pixi/react": "^8.0.5",
@@ -26,6 +28,7 @@
     "oxlint": "^1.88.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.4",
-    "vite-plugin-singlefile": "^2.3.4"
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^5.0.5"
   }
 }

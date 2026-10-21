@@ -1,4 +1,4 @@
-# Проверки до слияния в main: линтер, типы и сборка на каждом push в dev и в Pull Request
+# Проверки до слияния в main: линтер, тесты логики, типы и сборка на каждом push в dev и в Pull Request
 name: CI
 
 on:
@@ -20,4 +20,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:unit # тесты логики (Vitest), без браузера
       - run: npm run build # включает проверку типов (tsc -b)

@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import type { Plugin } from 'vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import { defineConfig } from 'vitest/config'
 
 // Для превью вне Telegram: убираем внешний скрипт telegram-web-app.js
 const stripTelegramScript = (): Plugin => ({
@@ -15,5 +16,6 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), ...(single ? [viteSingleFile(), stripTelegramScript()] : [])],
     build: { chunkSizeWarningLimit: 1500, ...(single ? { outDir: 'dist-single' } : {}) },
     server: { host: true }, // доступ с телефона в локальной сети
+    test: { include: ['src/**/*.test.ts'] }, // Vitest: только тесты логики; e2e/ — Playwright
   }
 })

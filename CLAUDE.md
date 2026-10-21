@@ -17,7 +17,9 @@ npm run dev          # дев-сервер, http://localhost:5173 (доступ�
 npm run build        # tsc -b + vite build → dist/  (проверка типов входит сюда)
 npm run lint         # oxlint
 npm run build:single # всё в один dist-single/index.html (для превью вне Telegram)
-npm test             # e2e-тесты Playwright (сам поднимает dev-сервер, мобильный Chromium)
+npm test             # все тесты: сначала логика (Vitest), потом e2e (Playwright)
+npm run test:unit    # тесты логики Vitest: src/**/*.test.ts, без браузера, ~0.1 с
+npm run test:e2e     # e2e-тесты Playwright (сам поднимает dev-сервер, мобильный Chromium)
 ```
 
 После любых изменений кода запускай `npm run build` — задача не сделана, пока сборка не проходит без ошибок.
@@ -26,17 +28,22 @@ npm test             # e2e-тесты Playwright (сам поднимает dev-
 
 ```
 src/
-  App.tsx          экраны (меню, пауза, game over), HUD, связь с Telegram — React
+  App.tsx          экраны (меню, пауза, game over, ангар, задания, награда дня), HUD, связь с Telegram — React
   App.css          стили интерфейса
   index.css        цветовые токены, safe-area отступы, фон
   audio.ts         звуки и музыка (синтез через Web Audio, файлов нет); звук включается из жеста — `unlockAudio()`
-  telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, рекорд в CloudStorage
+  telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, чтение/запись localStorage + CloudStorage
+  progress.ts      сохранение прогресса (рекорд, монеты, улучшения, скины, задания): JSON с версией и миграциями
+  quests.ts        задания: статистика партии, зачисление прогресса, выдача следующего — чистые функции
+  daily.ts         ежедневная награда: серия дней — чистые функции
+  *.test.ts        тесты логики Vitest рядом с модулем
   game/
     Game.tsx       мост React ↔ Pixi: создаёт World, передаёт тики (useTick) и ввод
     World.ts       ВСЯ игровая логика: игрок, враги, пули, бонусы, частицы, столкновения
     balance.ts     числа баланса: скорости, HP, очки, интервалы, шансы, темп волн
     waves.ts       состав волн: какие построения бывают, с какой волны, как часто; план волны
     textures.ts    векторная графика (Graphics), запекается в текстуры при старте
+    skins.ts       скины самолёта как SVG-строки: одна строка и для Pixi, и для <img> в интерфейсе
     debug.ts       типы отладочного API `window.__world` для e2e-тестов (только dev)
 e2e/               тесты Playwright: helpers.ts + spec-файлы по темам
 ROADMAP.md         план развития по версиям — задачи брать отсюда
@@ -45,7 +52,7 @@ ROADMAP.md         план развития по версиям — задач�
 ## Архитектура — важно соблюдать
 
 - **Игровая логика живёт в `World.ts` как обычный TS-класс, не в React.** Объекты обновляются напрямую каждый кадр. Не переносить сущности игры (пули, врагов, частицы) в React state/компоненты — будет тормозить.
-- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, combo, hit, kill, powerUp, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
+- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, combo, hit, kill, powerUp, coins, wave, bossDown, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
 - **Фазы игры** (`menu | playing | paused | over`) хранятся в `App.tsx`. `World.update(dt, mode)` получает `run | idle | frozen`.
 - **Графика:** новый спрайт — добавить имя в `TextureName` и функцию рисования в `makeTextures`. Картинки-файлы, когда появятся, класть в `src/assets/` и грузить через `Assets.load`.
 - **Pixi-классы в JSX** нужно регистрировать через `extend({ ... })`, теги с префиксом `pixi` (`<pixiContainer>`).
@@ -61,6 +68,7 @@ ROADMAP.md         план развития по версиям — задач�
 
 ## Тесты
 
+- **Логика без Pixi и React** (задания, награда дня, сохранения и миграции) — тесты Vitest рядом с модулем: `src/quests.ts` → `src/quests.test.ts`. Новую чистую функцию — сразу с тестом. Модули с состоянием (`progress.ts`) грузить заново через `vi.resetModules()`, `localStorage` подменять `vi.stubGlobal`.
 - e2e-тесты управляют миром через `window.__world` (`World.debugApi()`): выключить случайный спавн, поставить врага или бонус в точку, прочитать снимок состояния. Хелперы — в `e2e/helpers.ts`.
 - Новая механика или враг → тест в `e2e/`. Если тесту не хватает данных или действия — расширить `WorldDebug` в `debug.ts` и `debugApi()`.
 - Тесты не должны зависеть от случайности: `startGame(page)` по умолчанию выключает спавн и ждёт конца стартовой неуязвимости.
