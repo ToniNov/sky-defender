@@ -26,6 +26,7 @@ export interface DebugSnapshot {
   /** Уровни улучшений из ангара в этой партии. */
   upgrades: Record<string, number>;
   fireInterval: number;
+  skin: string;
   wave: number;
   lives: number;
   weapon: number;

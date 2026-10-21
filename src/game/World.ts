@@ -14,11 +14,13 @@ import {
   UPGRADES,
   WAVES,
   WEAPON_PATTERNS,
+  DEFAULT_SKIN,
   type PowerUpKind,
+  type SkinName,
   type Upgrades,
 } from './balance';
 import type { WorldDebug } from './debug';
-import type { Textures } from './textures';
+import { planeTexture, type Textures } from './textures';
 import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves';
 
 /**
@@ -30,6 +32,12 @@ import { BOSS_ESCORTS, FORMATIONS, planWave, type FormationName } from './waves'
 
 export type EnemyKind = 'scout' | 'saucer' | 'mother' | 'kamikaze' | 'shielder' | 'splitter' | 'mini';
 export type UpdateMode = 'run' | 'idle' | 'frozen';
+
+/** С чем игрок вылетает: улучшения и скин из ангара. */
+export interface Loadout {
+  upgrades: Upgrades;
+  skin: SkinName;
+}
 
 export interface WorldEvents {
   score(n: number): void;
@@ -237,6 +245,7 @@ export class World {
 
   private player = new Container();
   private flame: Sprite;
+  private body: Sprite;
   private shieldBubble: Sprite;
   private magnetRing: Sprite;
   private bombFlash = new Graphics();
@@ -265,6 +274,7 @@ export class World {
   private score = 0;
   private coinCount = 0; // монет собрано за партию
   private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
+  private skin: SkinName = DEFAULT_SKIN;
   private fireInterval: number = PLAYER.fireInterval;
   private magnetTime: number = POWER_UP.magnetTime;
   private lives: number = PLAYER.startLives;
@@ -346,8 +356,9 @@ export class World {
     this.flame = new Sprite(textures.flame);
     this.flame.anchor.set(0.5, 0);
     this.flame.y = 24;
-    const body = new Sprite(textures.plane);
+    const body = new Sprite(textures[planeTexture(DEFAULT_SKIN)]);
     body.anchor.set(0.5);
+    this.body = body;
     this.shieldBubble = new Sprite(textures.shieldBubble);
     this.shieldBubble.anchor.set(0.5);
     this.magnetRing = new Sprite(textures.magnetRing);
@@ -398,10 +409,12 @@ export class World {
     this.root.position.set(0, 0);
   }
 
-  /** Новая игра с улучшениями из ангара. */
-  reset(upgrades: Upgrades = NO_UPGRADES) {
+  /** Новая игра с улучшениями и скином из ангара. */
+  reset({ upgrades, skin }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN }) {
     this.clear();
     this.upgrades = upgrades;
+    this.skin = skin;
+    this.body.texture = this.tx[planeTexture(skin)];
     this.fireInterval = PLAYER.fireInterval * (1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate);
     this.magnetTime = POWER_UP.magnetTime + UPGRADES.magnet.timeStep * upgrades.magnet;
     this.score = 0;
@@ -1320,6 +1333,7 @@ export class World {
         score: this.score,
         coins: this.coinCount,
         upgrades: { ...this.upgrades },
+        skin: this.skin,
         fireInterval: this.fireInterval,
         wave: this.wave,
         lives: this.lives,

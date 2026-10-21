@@ -97,10 +97,10 @@ test('старый рекорд переезжает в новое сохран�
 
 test('сохранение из новой версии игры не теряет незнакомые поля', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('progress', JSON.stringify({ v: 9, best: 10, coins: 3, skins: ['red'], t: 1 }));
+    localStorage.setItem('progress', JSON.stringify({ v: 9, best: 10, coins: 3, achievements: ['first'], t: 1 }));
   });
   await startGame(page);
   await collectCoin(page);
   await pauseToMenu(page);
-  expect(await savedProgress(page)).toMatchObject({ v: 9, best: 10, coins: 4, skins: ['red'] });
+  expect(await savedProgress(page)).toMatchObject({ v: 9, best: 10, coins: 4, achievements: ['first'] });
 });

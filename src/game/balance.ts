@@ -224,6 +224,21 @@ export const QUESTS = {
 export type QuestKind = keyof typeof QUESTS.kinds;
 export const QUEST_KINDS = Object.keys(QUESTS.kinds) as QuestKind[];
 
+/** Скины самолёта: только внешний вид, на характеристики не влияют. Рисунки — в skins.ts. */
+export const SKINS = {
+  classic: { cost: 0 }, // есть у всех с начала
+  sunset: { cost: 150 },
+  emerald: { cost: 150 },
+  night: { cost: 250 },
+  delta: { cost: 400 },
+  stealth: { cost: 500 },
+  biplane: { cost: 600 },
+} as const;
+
+export type SkinName = keyof typeof SKINS;
+export const SKIN_NAMES = Object.keys(SKINS) as SkinName[];
+export const DEFAULT_SKIN: SkinName = 'classic';
+
 export type PowerUpKind = keyof typeof POWER_UP.drops;
 
 /** Комбо: сбитые подряд враги без урона увеличивают множитель очков за врагов. */

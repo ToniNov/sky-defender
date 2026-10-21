@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { QUESTS } from '../src/game/balance.ts';
+import { SAVE_VERSION } from '../src/progress.ts';
 import { pickUp, setCheats, snapshot, spawnEnemy } from './helpers.ts';
 
 type SavedQuest = { kind: string; tier: number; progress: number };
@@ -145,7 +146,7 @@ test('сохранение версии 3 получает задания и с�
   await shootScout(page);
   await toMenu(page);
   const s = await saved(page);
-  expect(s).toMatchObject({ v: 4, best: expect.any(Number), coins: 7, upgrades: { magnet: 1 } });
+  expect(s).toMatchObject({ v: SAVE_VERSION, best: expect.any(Number), coins: 7, upgrades: { magnet: 1 } });
   expect(s.quests.active).toHaveLength(QUESTS.active);
   expect(s.quests.active[0]).toEqual({ kind: 'scout', tier: 0, progress: 1 });
 });

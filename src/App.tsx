@@ -14,8 +14,19 @@ import {
   type RunStats,
 } from './quests';
 import { Game, type Phase } from './game/Game';
-import { DAILY, UPGRADE_NAMES, UPGRADES, upgradeMax, type QuestKind, type UpgradeName } from './game/balance';
-import type { WorldEvents } from './game/World';
+import {
+  DAILY,
+  SKIN_NAMES,
+  SKINS,
+  UPGRADE_NAMES,
+  UPGRADES,
+  upgradeMax,
+  type QuestKind,
+  type SkinName,
+  type UpgradeName,
+} from './game/balance';
+import { skinImage } from './game/skins';
+import type { Loadout, WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
   backButton,
@@ -131,6 +142,27 @@ export default function App() {
   const dailyAvailable = cloudReady && daily.available;
 
   const questsReady = progress.quests.active.filter(questComplete).length;
+  const loadout = useMemo<Loadout>(
+    () => ({ upgrades: progress.upgrades, skin: progress.skins.selected }),
+    [progress.upgrades, progress.skins.selected],
+  );
+
+  /** Купить скин (и сразу надеть) или надеть уже купленный. */
+  const pickSkin = useCallback(
+    (skin: SkinName) => {
+      const { coins, skins } = progressRef.current;
+      if (skins.owned.includes(skin)) {
+        if (skins.selected !== skin) commitProgress({ skins: { ...skins, selected: skin } });
+        haptic.impact('light');
+        return;
+      }
+      const cost = SKINS[skin].cost;
+      if (cost > coins) return;
+      commitProgress({ coins: coins - cost, skins: { owned: [...skins.owned, skin], selected: skin } });
+      haptic.notify('success');
+    },
+    [commitProgress],
+  );
 
   const claimDaily = useCallback(() => {
     const p = progressRef.current;
@@ -314,7 +346,7 @@ export default function App() {
         autoDensity
         resolution={Math.min(window.devicePixelRatio || 1, 2)}
       >
-        <Game phase={phase} session={session} events={events} upgrades={progress.upgrades} />
+        <Game phase={phase} session={session} events={events} loadout={loadout} />
       </Application>
 
       {inGame && (
@@ -372,7 +404,7 @@ export default function App() {
       {phase === 'menu' && !overlay && (
         <Screen>
           <div className="logo" aria-hidden>
-            <PlaneIcon />
+            <img src={skinImage(progress.skins.selected)} width={72} height={72} alt="" />
           </div>
           <h1 className="title">
             Небесный
@@ -426,7 +458,9 @@ export default function App() {
         <SettingsScreen settings={settings} onChange={updateSettings} onClose={() => setOverlay(null)} />
       )}
 
-      {overlay === 'hangar' && <HangarScreen progress={progress} onBuy={buyUpgrade} onClose={() => setOverlay(null)} />}
+      {overlay === 'hangar' && (
+        <HangarScreen progress={progress} onBuy={buyUpgrade} onPickSkin={pickSkin} onClose={() => setOverlay(null)} />
+      )}
 
       {overlay === 'quests' && (
         <QuestsScreen quests={progress.quests.active} onClaim={claimQuestAt} onClose={() => setOverlay(null)} />
@@ -538,15 +572,28 @@ const UPGRADE_INFO: Record<UpgradeName, { title: string; effect: (level: number)
   magnet: { title: 'Сильный магнит', effect: (l) => `+${l * UPGRADES.magnet.timeStep} с действия` },
 };
 
+const SKIN_TITLE: Record<SkinName, string> = {
+  classic: 'Классика',
+  sunset: 'Закат',
+  emerald: 'Изумруд',
+  night: 'Ночь',
+  delta: 'Дельта',
+  stealth: 'Стелс',
+  biplane: 'Ретро',
+};
+
 function HangarScreen({
   progress,
   onBuy,
+  onPickSkin,
   onClose,
 }: {
   progress: Progress;
   onBuy: (name: UpgradeName) => void;
+  onPickSkin: (skin: SkinName) => void;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<'upgrades' | 'skins'>('upgrades');
   return (
     <Screen>
       <h2 className="title small">Ангар</h2>
@@ -554,40 +601,19 @@ function HangarScreen({
         <CoinIcon />
         {progress.coins}
       </p>
-      <ul className="upgrades">
-        {UPGRADE_NAMES.map((name) => {
-          const level = progress.upgrades[name];
-          const max = upgradeMax(name);
-          const cost = UPGRADES[name].costs[level];
-          const info = UPGRADE_INFO[name];
-          return (
-            <li className="upgrade" key={name}>
-              <div className="upgrade-text">
-                <span className="upgrade-title">{info.title}</span>
-                <span className="upgrade-effect">{level > 0 ? info.effect(level) : 'не куплено'}</span>
-                <span className="upgrade-pips" aria-label={`Уровень ${level} из ${max}`}>
-                  {Array.from({ length: max }, (_, i) => (
-                    <i key={i} className={i < level ? 'on' : ''} />
-                  ))}
-                </span>
-              </div>
-              {cost === undefined ? (
-                <span className="upgrade-max">Макс.</span>
-              ) : (
-                <button
-                  className="btn buy"
-                  disabled={cost > progress.coins}
-                  onClick={() => onBuy(name)}
-                  aria-label={`Купить: ${info.title} за ${cost}`}
-                >
-                  <CoinIcon />
-                  {cost}
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'upgrades'} onClick={() => setTab('upgrades')}>
+          Улучшения
+        </button>
+        <button role="tab" aria-selected={tab === 'skins'} onClick={() => setTab('skins')}>
+          Скины
+        </button>
+      </div>
+      {tab === 'skins' ? (
+        <SkinGrid progress={progress} onPick={onPickSkin} />
+      ) : (
+        <UpgradeList progress={progress} onBuy={onBuy} />
+      )}
       <button className="btn primary" onClick={onClose}>
         Готово
       </button>
@@ -663,6 +689,81 @@ function QuestsScreen({ quests, onClaim, onClose }: { quests: Quest[]; onClaim: 
   );
 }
 
+function UpgradeList({ progress, onBuy }: { progress: Progress; onBuy: (name: UpgradeName) => void }) {
+  return (
+    <ul className="upgrades">
+      {UPGRADE_NAMES.map((name) => {
+        const level = progress.upgrades[name];
+        const max = upgradeMax(name);
+        const cost = UPGRADES[name].costs[level];
+        const info = UPGRADE_INFO[name];
+        return (
+          <li className="upgrade" key={name}>
+            <div className="upgrade-text">
+              <span className="upgrade-title">{info.title}</span>
+              <span className="upgrade-effect">{level > 0 ? info.effect(level) : 'не куплено'}</span>
+              <span className="upgrade-pips" aria-label={`Уровень ${level} из ${max}`}>
+                {Array.from({ length: max }, (_, i) => (
+                  <i key={i} className={i < level ? 'on' : ''} />
+                ))}
+              </span>
+            </div>
+            {cost === undefined ? (
+              <span className="upgrade-max">Макс.</span>
+            ) : (
+              <button
+                className="btn buy"
+                disabled={cost > progress.coins}
+                onClick={() => onBuy(name)}
+                aria-label={`Купить: ${info.title} за ${cost}`}
+              >
+                <CoinIcon />
+                {cost}
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SkinGrid({ progress, onPick }: { progress: Progress; onPick: (skin: SkinName) => void }) {
+  const { owned, selected } = progress.skins;
+  return (
+    <ul className="skins">
+      {SKIN_NAMES.map((skin) => {
+        const title = SKIN_TITLE[skin];
+        const cost = SKINS[skin].cost;
+        const has = owned.includes(skin);
+        return (
+          <li key={skin} className={`skin${skin === selected ? ' selected' : ''}`}>
+            <img src={skinImage(skin)} width={48} height={48} alt="" className={has ? '' : 'locked'} />
+            <span className="skin-title">{title}</span>
+            {skin === selected ? (
+              <span className="skin-state">Выбран</span>
+            ) : has ? (
+              <button className="btn buy" onClick={() => onPick(skin)} aria-label={`Выбрать скин: ${title}`}>
+                Выбрать
+              </button>
+            ) : (
+              <button
+                className="btn buy"
+                disabled={cost > progress.coins}
+                onClick={() => onPick(skin)}
+                aria-label={`Купить скин: ${title} за ${cost}`}
+              >
+                <CoinIcon />
+                {cost}
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function DailyScreen({ streak, onClaim, onClose }: { streak: number; onClaim: () => void; onClose: () => void }) {
   const slot = dailySlot(streak);
   return (
@@ -710,16 +811,4 @@ function Heart() {
 
 function CoinIcon() {
   return <i className="coin-icon" aria-hidden />;
-}
-
-function PlaneIcon() {
-  return (
-    <svg viewBox="0 0 64 64" width="72" height="72">
-      <polygon points="32,20 62,40 62,47 32,39 2,47 2,40" fill="#3fa9f5" />
-      <polygon points="32,46 46,57 46,61 32,56 18,61 18,57" fill="#2b7fc4" />
-      <rect x="26" y="4" width="12" height="54" rx="6" fill="#eef6ff" />
-      <rect x="26" y="30" width="12" height="4" fill="#ff5a5f" />
-      <ellipse cx="32" cy="17" rx="3.5" ry="7" fill="#1b2b48" />
-    </svg>
-  );
 }

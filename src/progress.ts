@@ -1,5 +1,15 @@
 import { isDayKey, NO_DAILY, type Daily } from './daily';
-import { NO_UPGRADES, QUESTS, UPGRADE_NAMES, upgradeMax, type QuestKind, type Upgrades } from './game/balance';
+import {
+  DEFAULT_SKIN,
+  NO_UPGRADES,
+  QUESTS,
+  SKINS,
+  UPGRADE_NAMES,
+  upgradeMax,
+  type QuestKind,
+  type SkinName,
+  type Upgrades,
+} from './game/balance';
 import { fillQuests, questTarget, type Quest, type Quests } from './quests';
 import { readCloudString, readLocalString, writeString } from './telegram';
 
@@ -19,13 +29,19 @@ export interface Progress {
   /** Серия ежедневных наград. */
   daily: Daily;
   quests: Quests;
+  skins: Skins;
   /** Время последнего сохранения (мс): из облака и устройства берём более свежее. */
   t: number;
 }
 
+export interface Skins {
+  owned: SkinName[];
+  selected: SkinName;
+}
+
 type Raw = Record<string, unknown>;
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 const KEY = 'progress';
 const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд лежал отдельным числом
 
@@ -35,14 +51,31 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   1: (d) => ({ ...d, upgrades: {} }),
   2: (d) => ({ ...d, daily: { last: '', streak: 0 } }),
   3: (d) => ({ ...d, quests: { active: [], done: {} } }),
+  4: (d) => ({ ...d, skins: { owned: [DEFAULT_SKIN], selected: DEFAULT_SKIN } }),
 };
 
-export const EMPTY_PROGRESS: Progress = { best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, quests: fillQuests({ active: [], done: {} }), t: 0 };
+export const EMPTY_PROGRESS: Progress = {
+  best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, quests: fillQuests({ active: [], done: {} }),
+  skins: { owned: [DEFAULT_SKIN], selected: DEFAULT_SKIN },
+  t: 0,
+};
 
 const count = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.floor(x) : 0);
 
 const isQuestKind = (k: unknown): k is QuestKind => typeof k === 'string' && k in QUESTS.kinds;
 const asObject = (x: unknown): Raw => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Raw) : {});
+
+const isSkin = (k: unknown): k is SkinName => typeof k === 'string' && k in SKINS;
+
+/** Скины из более новой версии игры храним как есть, а выбранным тогда считаем классический. */
+function parseSkins(x: unknown): Skins {
+  const raw = asObject(x);
+  const list = Array.isArray(raw.owned) ? raw.owned : [];
+  for (const k of list) if (typeof k === 'string' && !isSkin(k) && !unknownSkins.includes(k)) unknownSkins.push(k);
+  const owned = [DEFAULT_SKIN, ...list.filter(isSkin).filter((k) => k !== DEFAULT_SKIN)];
+  const selected = isSkin(raw.selected) && owned.includes(raw.selected) ? raw.selected : DEFAULT_SKIN;
+  return { owned: [...new Set(owned)], selected };
+}
 
 /** Задания незнакомых типов (из более новой версии игры) отбрасываем — на их место встанут известные. */
 function parseQuests(x: unknown): Quests {
@@ -66,6 +99,7 @@ function parseQuests(x: unknown): Quests {
 let unknownFields: Raw = {};
 let storedVersion = 0; // и номер версии не понижаем
 let unknownUpgrades: Raw = {}; // и улучшения, которых здесь ещё нет
+const unknownSkins: string[] = []; // и скины
 
 export function migrate(data: Raw): Raw {
   let d = data;
@@ -92,7 +126,7 @@ function parse(json: string | null, legacyBest: string | null): Raw | null {
 
 function toProgress(d: Raw | null): Progress {
   if (!d) return EMPTY_PROGRESS;
-  const { v, best, coins, upgrades, daily, quests, t, ...rest } = d;
+  const { v, best, coins, upgrades, daily, quests, skins, t, ...rest } = d;
   unknownFields = { ...unknownFields, ...rest };
   storedVersion = Math.max(storedVersion, count(v));
   const raw: Raw = upgrades && typeof upgrades === 'object' ? (upgrades as Raw) : {};
@@ -107,6 +141,7 @@ function toProgress(d: Raw | null): Progress {
     upgrades: known,
     daily: { last, streak: last ? count(dl.streak) : 0 },
     quests: parseQuests(quests),
+    skins: parseSkins(skins),
     t: count(t),
   };
 }
@@ -139,6 +174,7 @@ export function saveProgress(p: Progress) {
       upgrades: { ...unknownUpgrades, ...p.upgrades },
       daily: p.daily,
       quests: p.quests,
+      skins: { ...p.skins, owned: [...p.skins.owned, ...unknownSkins] },
       t: p.t,
     }),
   );
