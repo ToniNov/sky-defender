@@ -44,6 +44,8 @@ const supports = (version: string) => !!tg?.isVersionAtLeast?.(version);
 /** true, если приложение реально открыто внутри Telegram. */
 export const inTelegram = !!tg?.initData;
 export const userName = tg?.initDataUnsafe?.user?.first_name;
+/** Подписанные данные запуска — сервер проверяет по ним, кто играет. Вне Telegram пусто. */
+export const initData = tg?.initData ?? '';
 
 const BG = '#0b1026';
 

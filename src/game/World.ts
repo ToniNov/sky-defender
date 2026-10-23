@@ -501,6 +501,12 @@ export class World {
       },
       spawnMissile: (x, y) => this.shots.spawnMissile(x, y, Math.PI / 2),
       movePlayer: (x, y) => p.moveTo(x, y),
+      crash: () => {
+        p.lives = 1;
+        p.setShield(false);
+        this.cheats.noDamage = false;
+        this.damagePlayer();
+      },
     };
   }
 }

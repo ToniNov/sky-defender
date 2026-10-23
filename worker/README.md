@@ -30,5 +30,10 @@ npx wrangler secret put BOT_TOKEN -c worker/wrangler.toml   # токен бот�
 npm run api:deploy                         # выдаст адрес вида https://sky-defender-api.<аккаунт>.workers.dev
 ```
 
+Адрес воркера игра берёт при сборке из `VITE_API_URL`. Для GitHub Pages:
+**Settings → Secrets and variables → Actions → Variables → New repository variable**, имя `API_URL`,
+значение — адрес из `api:deploy` (без `/` в конце). Затем пересобрать игру (push в `main` или ручной запуск деплоя).
+Локально: `VITE_API_URL=http://localhost:8787 npm run dev`.
+
 Новая таблица или колонка — новый файл `migrations/000N_*.sql`, затем `npm run api:migrate`.
 Домены, с которых игре можно ходить в API, — `ALLOWED_ORIGINS` в `wrangler.toml`.

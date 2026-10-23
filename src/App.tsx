@@ -1,6 +1,7 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
+import { apiEnabled, fetchLeaderboard, submitScore, type Leaderboard } from './api';
 import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
 import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
 import {
@@ -59,13 +60,15 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | null>(null); // экран поверх меню или паузы
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | 'leaders' | null>(null); // экран поверх меню или паузы
   const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
   const progressRef = useRef(progress);
   const runRef = useRef<RunStats>(emptyRunStats()); // статистика партии для заданий и монет
   const bankedRef = useRef<RunStats>(emptyRunStats()); // она же на момент прошлого зачисления в прогресс
   const toastedRef = useRef(new Set<QuestKind>()); // о каких заданиях уже сказали в этой партии
   const [questToast, setQuestToast] = useState<Quest | null>(null);
+  const [rank, setRank] = useState<number | null>(null); // место в таблице лидеров после партии
+  const submitRef = useRef(0); // номер отправки рекорда: ответ на старую не должен попасть в новую партию
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -194,6 +197,8 @@ export default function App() {
 
   const start = useCallback(() => {
     setNewRecord(false);
+    setRank(null);
+    submitRef.current++;
     runRef.current = emptyRunStats();
     bankedRef.current = emptyRunStats();
     toastedRef.current.clear();
@@ -271,6 +276,11 @@ export default function App() {
         const record = final > progressRef.current.best;
         bank(final);
         setNewRecord(record);
+        // Шлём рекорд, а не очки партии: так на сервер попадёт и рекорд, поставленный до таблицы лидеров
+        const id = ++submitRef.current;
+        submitScore(progressRef.current.best).then((r) => {
+          if (r && id === submitRef.current) setRank(r.rank);
+        });
         setPhase('over');
         haptic.notify(record ? 'success' : 'error');
       },
@@ -436,6 +446,11 @@ export default function App() {
               )}
             </button>
           </div>
+          {apiEnabled && (
+            <button className="btn ghost" onClick={() => setOverlay('leaders')}>
+              🏆 Лидеры
+            </button>
+          )}
           {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
           {progress.coins > 0 && (
             <p className="wallet" aria-label={`Монеты: ${progress.coins}`}>
@@ -465,6 +480,8 @@ export default function App() {
       {overlay === 'quests' && (
         <QuestsScreen quests={progress.quests.active} onClaim={claimQuestAt} onClose={() => setOverlay(null)} />
       )}
+
+      {overlay === 'leaders' && <LeadersScreen onClose={() => setOverlay(null)} />}
 
       {questToast && phase === 'playing' && (
         <div className="quest-toast" role="status">
@@ -498,6 +515,7 @@ export default function App() {
           {newRecord && <p className="record">Новый рекорд!</p>}
           <p className="score-big">{score}</p>
           <p className="best">Рекорд: {progress.best}</p>
+          {rank !== null && <p className="best">Место в таблице лидеров: {rank}</p>}
           {runCoins > 0 && (
             <p className="wallet" aria-label={`Собрано монет: ${runCoins}, всего ${progress.coins}`}>
               <CoinIcon />+{runCoins} <span className="wallet-total">всего {progress.coins}</span>
@@ -761,6 +779,47 @@ function SkinGrid({ progress, onPick }: { progress: Progress; onPick: (skin: Ski
         );
       })}
     </ul>
+  );
+}
+
+function LeadersScreen({ onClose }: { onClose: () => void }) {
+  const [board, setBoard] = useState<Leaderboard | null | 'loading'>('loading');
+  useEffect(() => {
+    let open = true;
+    fetchLeaderboard().then((b) => open && setBoard(b));
+    return () => {
+      open = false;
+    };
+  }, []);
+  return (
+    <Screen>
+      <h2 className="title small">Лидеры</h2>
+      {board === 'loading' ? (
+        <p className="subtitle">Загрузка…</p>
+      ) : board === null ? (
+        <p className="subtitle">Таблица сейчас недоступна. Попробуй позже.</p>
+      ) : board.top.length === 0 ? (
+        <p className="subtitle">Пока здесь никого нет — стань первым!</p>
+      ) : (
+        <ol className="leaders">
+          {board.top.map((e, i) => (
+            <li className="leader" key={i}>
+              <span className="leader-rank">{i + 1}</span>
+              <span className="leader-name">{e.name}</span>
+              <span className="leader-score">{e.score}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {board && board !== 'loading' && board.me && (
+        <p className="record">
+          Твоё место: {board.me.rank} · {board.me.score}
+        </p>
+      )}
+      <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
   );
 }
 
