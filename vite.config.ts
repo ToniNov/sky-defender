@@ -16,6 +16,6 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), ...(single ? [viteSingleFile(), stripTelegramScript()] : [])],
     build: { chunkSizeWarningLimit: 1500, ...(single ? { outDir: 'dist-single' } : {}) },
     server: { host: true }, // доступ с телефона в локальной сети
-    test: { include: ['src/**/*.test.ts'] }, // Vitest: только тесты логики; e2e/ — Playwright
+    test: { include: ['src/**/*.test.ts', 'worker/src/**/*.test.ts'] }, // Vitest: только тесты логики; e2e/ — Playwright
   }
 })

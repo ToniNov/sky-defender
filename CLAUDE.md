@@ -8,6 +8,7 @@
 - React 19 + TypeScript, сборка Vite
 - PixiJS v8 + @pixi/react v8 (рендер сцены)
 - Telegram WebApp SDK (подключён скриптом в `index.html`)
+- Бэкенд: Cloudflare Workers + D1 (`worker/`), отдельно от игры
 - Деплой: GitHub Actions → GitHub Pages при push в `main` (`.github/workflows/deploy.yml`)
 
 ## Команды
@@ -20,6 +21,9 @@ npm run build:single # всё в один dist-single/index.html (для пре�
 npm test             # все тесты: сначала логика (Vitest), потом e2e (Playwright)
 npm run test:unit    # тесты логики Vitest: src/**/*.test.ts, без браузера, ~0.1 с
 npm run test:e2e     # e2e-тесты Playwright (сам поднимает dev-сервер, мобильный Chromium)
+npm run api:dev      # API локально, http://localhost:8787 (нужен worker/.dev.vars с BOT_TOKEN)
+npm run api:migrate:local  # миграции D1 локально; api:migrate — в боевую базу
+npm run api:deploy   # выложить API (вручную, только по явной просьбе)
 ```
 
 После любых изменений кода запускай `npm run build` — задача не сделана, пока сборка не проходит без ошибок.
@@ -57,6 +61,12 @@ src/
     skins.ts       скины самолёта как SVG-строки: одна строка и для Pixi, и для <img> в интерфейсе
     debug.ts       типы отладочного API `window.__world` для e2e-тестов (только dev)
 e2e/               тесты Playwright: helpers.ts + spec-файлы по темам
+worker/            API на Cloudflare Workers (свой tsconfig.worker.json, типы Workers); настройка — worker/README.md
+  src/index.ts       маршруты: /api/health, /api/leaderboard, /api/score; CORS
+  src/initData.ts    проверка подписи Telegram initData — чистые функции + тест
+  src/players.ts     имя для таблицы, проверка присланных очков + тест
+  migrations/        SQL-миграции D1 (новая схема — новый файл 000N_*.sql)
+  wrangler.toml      конфиг воркера: база D1, ALLOWED_ORIGINS
 ROADMAP.md         план развития по версиям — задачи брать отсюда
 docs/art-brief.md  бриф на графику кораблей: требования и промпты для генерации моделей
 ```
@@ -79,9 +89,15 @@ docs/art-brief.md  бриф на графику кораблей: требова
 - Учитывать безопасные зоны: CSS-переменные `--safe-top` / `--safe-bottom` из `index.css`.
 - Вертикальные свайпы отключены (`disableVerticalSwipes`), иначе мини-апп сворачивается во время игры.
 
+## Бэкенд
+
+- Игрок на сервере — только из проверенной `initData` (заголовок `Authorization: tma <initData>`), никогда из тела запроса.
+- Токен бота — секрет (`wrangler secret put BOT_TOKEN`, локально `worker/.dev.vars`), в репозиторий не попадает.
+- Код воркера не импортирует ничего из `src/` и наоборот.
+
 ## Тесты
 
-- **Логика без Pixi и React** (правила боя, задания, награда дня, сохранения и миграции) — тесты Vitest рядом с модулем: `src/quests.ts` → `src/quests.test.ts`. Новую чистую функцию — сразу с тестом. Модули с состоянием (`progress.ts`) грузить заново через `vi.resetModules()`, `localStorage` подменять `vi.stubGlobal`.
+- **Логика без Pixi и React** (правила боя, задания, награда дня, сохранения и миграции) — тесты Vitest рядом с модулем: `src/quests.ts` → `src/quests.test.ts` (так же и в `worker/src/`). Новую чистую функцию — сразу с тестом. Модули с состоянием (`progress.ts`) грузить заново через `vi.resetModules()`, `localStorage` подменять `vi.stubGlobal`.
 - e2e-тесты управляют миром через `window.__world` (`World.debugApi()`): выключить случайный спавн, поставить врага или бонус в точку, прочитать снимок состояния. Хелперы — в `e2e/helpers.ts`.
 - Новая механика или враг → тест в `e2e/`. Если тесту не хватает данных или действия — расширить `WorldDebug` в `debug.ts` и `debugApi()`.
 - Тесты не должны зависеть от случайности: `startGame(page)` по умолчанию выключает спавн и ждёт конца стартовой неуязвимости.
