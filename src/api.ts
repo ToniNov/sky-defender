@@ -75,6 +75,41 @@ export async function prepareShare(score: number): Promise<string | null> {
   return parseShare(await request('/api/share', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } }));
 }
 
+export interface Referrals {
+  /** Ссылка-приглашение; null — на сервере не настроен адрес мини-аппа. */
+  link: string | null;
+  /** Сколько друзей пришло по ссылке и сыграло. */
+  invited: number;
+  /** За скольких из них ещё не забрана награда. */
+  unclaimed: number;
+}
+
+/** Проверить ответ /api/referrals; null — ответ не той формы. */
+export function parseReferrals(data: unknown): Referrals | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const { link, invited, unclaimed } = data as { link?: unknown; invited?: unknown; unclaimed?: unknown };
+  if (!isInt(invited) || !isInt(unclaimed) || unclaimed < 0 || unclaimed > invited) return null;
+  return { link: typeof link === 'string' && link !== '' ? link : null, invited, unclaimed };
+}
+
+/** Проверить ответ /api/referrals/claim: за скольких друзей выдать награду; null — ответ не той формы. */
+export function parseClaim(data: unknown): number | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const { claimed } = data as { claimed?: unknown };
+  return isInt(claimed) && claimed >= 0 ? claimed : null;
+}
+
+export async function fetchReferrals(): Promise<Referrals | null> {
+  if (!canSubmit) return null;
+  return parseReferrals(await request('/api/referrals'));
+}
+
+/** Забрать награду за пришедших друзей. Сервер отдаёт каждого друга один раз — монеты начисляет игра. */
+export async function claimReferrals(): Promise<number | null> {
+  if (!canSubmit) return null;
+  return parseClaim(await request('/api/referrals/claim', { method: 'POST' }));
+}
+
 /** Отправить рекорд. Сервер хранит лучший результат, так что слать можно сколько угодно раз. */
 export async function submitScore(score: number): Promise<{ best: number; rank: number } | null> {
   if (!canSubmit) return null;

@@ -6,9 +6,12 @@
  *   GET  /api/leaderboard  — топ игроков; с заголовком Authorization ещё и своё место
  *   POST /api/score        — { score } после партии; сохраняется лучший результат
  *   POST /api/share        — { score } → { id } подготовленного сообщения для WebApp.shareMessage
+ *   GET  /api/referrals    — { link, invited, unclaimed }: ссылка-приглашение и сколько друзей пришло
+ *   POST /api/referrals/claim — { claimed }: за скольких друзей выдать награду (монеты начисляет игра)
  */
 import { type TelegramUser, verifyInitData } from './initData';
 import { displayName, parseScore } from './players';
+import { inviteLink, parseReferrer } from './referrals';
 import { preparedMessageId, shareResult } from './share';
 
 export interface Env {
@@ -41,12 +44,17 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 const fail = (error: string, status: number) => json({ error }, status);
 
+interface Auth {
+  user: TelegramUser;
+  startParam?: string;
+}
+
 /** Игрок из заголовка Authorization; null — заголовка нет или подпись неверна. */
-async function authUser(request: Request, env: Env): Promise<TelegramUser | null> {
+async function authorize(request: Request, env: Env): Promise<Auth | null> {
   const header = request.headers.get('Authorization') ?? '';
   if (!header.startsWith('tma ')) return null;
   const result = await verifyInitData(header.slice(4), env.BOT_TOKEN);
-  return result.ok ? result.user : null;
+  return result.ok ? { user: result.user, startParam: result.startParam } : null;
 }
 
 async function rankOf(env: Env, score: number): Promise<number> {
@@ -63,7 +71,7 @@ async function leaderboard(request: Request, env: Env): Promise<Response> {
     .bind(LEADERBOARD_SIZE)
     .all<LeaderRow>();
 
-  const user = await authUser(request, env);
+  const user = (await authorize(request, env))?.user;
   let me: { rank: number; score: number } | null = null;
   if (user) {
     const row = await env.DB.prepare('SELECT best_score FROM players WHERE id = ?')
@@ -74,13 +82,31 @@ async function leaderboard(request: Request, env: Env): Promise<Response> {
   return json({ top: results, me });
 }
 
+/** Засчитать друга пригласившему — только если тот сам уже играл. Повторно не засчитывается (invitee_id — ключ). */
+async function recordReferral(env: Env, invitee: number, startParam: string | undefined, now: number) {
+  const referrer = parseReferrer(startParam, invitee);
+  if (referrer === null) return;
+  await env.DB.prepare(
+    `INSERT INTO referrals (invitee_id, referrer_id, created_at)
+     SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM players WHERE id = ?2)
+     ON CONFLICT (invitee_id) DO NOTHING`,
+  )
+    .bind(invitee, referrer, now)
+    .run();
+}
+
 async function submitScore(request: Request, env: Env): Promise<Response> {
-  const user = await authUser(request, env);
-  if (!user) return fail('unauthorized', 401);
+  const auth = await authorize(request, env);
+  if (!auth) return fail('unauthorized', 401);
+  const { user } = auth;
   const score = parseScore(await request.json().catch(() => null));
   if (score === null) return fail('bad-score', 400);
 
   const now = Date.now();
+  // Приглашение засчитывается новому игроку: кто уже играл, тот пришёл не по ссылке
+  const known = await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(user.id).first();
+  if (!known) await recordReferral(env, user.id, auth.startParam, now);
+
   // Лучший результат не уменьшается; имя обновляем — игрок мог его сменить
   const row = await env.DB.prepare(
     `INSERT INTO players (id, name, best_score, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)
@@ -98,7 +124,7 @@ async function submitScore(request: Request, env: Env): Promise<Response> {
 }
 
 async function share(request: Request, env: Env): Promise<Response> {
-  const user = await authUser(request, env);
+  const user = (await authorize(request, env))?.user;
   if (!user) return fail('unauthorized', 401);
   if (!env.APP_URL) return fail('share-disabled', 503);
   const score = parseScore(await request.json().catch(() => null));
@@ -109,7 +135,7 @@ async function share(request: Request, env: Env): Promise<Response> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       user_id: user.id,
-      result: shareResult(user, score, env.APP_URL),
+      result: shareResult(user, score, inviteLink(env.APP_URL, user.id)), // «Играть» — сразу приглашение
       allow_user_chats: true,
       allow_group_chats: true,
     }),
@@ -121,6 +147,33 @@ async function share(request: Request, env: Env): Promise<Response> {
     return fail('telegram-error', 502);
   }
   return json({ id });
+}
+
+async function referrals(request: Request, env: Env): Promise<Response> {
+  const user = (await authorize(request, env))?.user;
+  if (!user) return fail('unauthorized', 401);
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS invited, COALESCE(SUM(rewarded = 0), 0) AS unclaimed FROM referrals WHERE referrer_id = ?',
+  )
+    .bind(user.id)
+    .first<{ invited: number; unclaimed: number }>();
+  return json({
+    link: env.APP_URL ? inviteLink(env.APP_URL, user.id) : null,
+    invited: row?.invited ?? 0,
+    unclaimed: row?.unclaimed ?? 0,
+  });
+}
+
+async function claimReferrals(request: Request, env: Env): Promise<Response> {
+  const user = (await authorize(request, env))?.user;
+  if (!user) return fail('unauthorized', 401);
+  // Одним запросом: двойное нажатие не выдаст награду дважды
+  const { results } = await env.DB.prepare(
+    'UPDATE referrals SET rewarded = 1 WHERE referrer_id = ? AND rewarded = 0 RETURNING invitee_id',
+  )
+    .bind(user.id)
+    .all();
+  return json({ claimed: results.length });
 }
 
 export default {
@@ -136,6 +189,8 @@ export default {
       else if (route === 'GET /api/leaderboard') response = await leaderboard(request, env);
       else if (route === 'POST /api/score') response = await submitScore(request, env);
       else if (route === 'POST /api/share') response = await share(request, env);
+      else if (route === 'GET /api/referrals') response = await referrals(request, env);
+      else if (route === 'POST /api/referrals/claim') response = await claimReferrals(request, env);
       else response = fail('not-found', 404);
     } catch (err) {
       console.error(err);

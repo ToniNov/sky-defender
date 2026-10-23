@@ -68,12 +68,14 @@ declare global {
   interface Window {
     __shared?: string[];
     __shareSent?: boolean;
+    __opened?: string[];
   }
 }
 
 /**
  * Притвориться, что игра открыта в Telegram: есть initData (подпись проверяет сервер, а его подменяют тесты).
- * version — версия Bot API клиента; shareMessage запоминает id и сразу «отправляет» (window.__shareSent).
+ * version — версия Bot API клиента; shareMessage запоминает id и сразу «отправляет» (window.__shareSent),
+ * openTelegramLink запоминает ссылки (window.__opened).
  */
 export async function fakeTelegram(page: Page, { version = '6.0' } = {}): Promise<string> {
   const initData = 'auth_date=1&user=%7B%22id%22%3A42%7D&hash=test';
@@ -87,6 +89,7 @@ export async function fakeTelegram(page: Page, { version = '6.0' } = {}): Promis
       };
       window.__shared = [];
       window.__shareSent = true;
+      window.__opened = [];
       Object.assign(window, {
         Telegram: {
           WebApp: {
@@ -99,6 +102,7 @@ export async function fakeTelegram(page: Page, { version = '6.0' } = {}): Promis
               window.__shared!.push(id);
               cb?.(window.__shareSent!);
             },
+            openTelegramLink: (url: string) => window.__opened!.push(url),
           },
         },
       });

@@ -8,6 +8,8 @@
 | `GET /api/health` | `{ ok: true }` |
 | `GET /api/leaderboard` | `{ top: [{ name, score }], me: { rank, score } \| null }` — топ-50; `me` только с Authorization |
 | `POST /api/score` | тело `{ score }` → `{ best, rank }`; хранится лучший результат игрока |
+| `GET /api/referrals` | `{ link, invited, unclaimed }`: ссылка-приглашение `…?startapp=ref_<id>`, сколько друзей пришло, за скольких награда не забрана |
+| `POST /api/referrals/claim` | `{ claimed }`: отмечает награду забранной; монеты (`REFERRAL.reward` за друга) начисляет игра |
 | `POST /api/share` | тело `{ score }` → `{ id }`: сообщение с результатом, подготовленное через Bot API `savePreparedInlineMessage`; игра открывает его в `WebApp.shareMessage(id)` |
 
 ## Локально
@@ -32,7 +34,11 @@ npm run api:deploy                         # выдаст адрес вида ht
 ```
 
 Для «Поделиться результатом» впиши в `APP_URL` (`wrangler.toml`) ссылку на мини-апп из BotFather,
-например `https://t.me/<бот>/<приложение>`: она станет кнопкой «Играть» в сообщении. Пока там пусто, `/api/share` отвечает 503.
+например `https://t.me/<бот>/<приложение>`: она станет кнопкой «Играть» в сообщении и основой ссылок-приглашений.
+Пока там пусто, `/api/share` отвечает 503, а приглашения недоступны.
+
+Друг засчитывается, когда новый игрок, открывший игру по ссылке, впервые присылает результат партии,
+и только если пригласивший сам уже играл. Кто играл раньше, тот по ссылке не засчитывается.
 
 Адрес воркера игра берёт при сборке из `VITE_API_URL`. Для GitHub Pages:
 **Settings → Secrets and variables → Actions → Variables → New repository variable**, имя `API_URL`,

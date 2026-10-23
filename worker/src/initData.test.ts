@@ -32,6 +32,11 @@ describe('verifyInitData', () => {
     expect(result).toEqual({ ok: true, user: USER, authDate: NOW - 60 });
   });
 
+  it('start_param из ссылки тоже подписан и доходит до сервера', async () => {
+    const result = await verifyInitData(await makeInitData(fields({ start_param: 'ref_7' })), TOKEN, NOW);
+    expect(result).toEqual({ ok: true, user: USER, authDate: NOW - 60, startParam: 'ref_7' });
+  });
+
   it('подменённое поле не проходит', async () => {
     const params = new URLSearchParams(await makeInitData(fields()));
     params.set('user', JSON.stringify({ ...USER, id: 1 }));

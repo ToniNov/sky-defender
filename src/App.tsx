@@ -1,7 +1,17 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
-import { apiEnabled, canSubmit, fetchLeaderboard, prepareShare, submitScore, type Leaderboard } from './api';
+import {
+  apiEnabled,
+  canSubmit,
+  claimReferrals,
+  fetchLeaderboard,
+  fetchReferrals,
+  prepareShare,
+  submitScore,
+  type Leaderboard,
+  type Referrals,
+} from './api';
 import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
 import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
 import {
@@ -17,6 +27,7 @@ import {
 import { Game, type Phase } from './game/Game';
 import {
   DAILY,
+  REFERRAL,
   SKIN_NAMES,
   SKINS,
   UPGRADE_NAMES,
@@ -40,6 +51,7 @@ import {
   saveSettings,
   saveTutorialSeen,
   setHapticEnabled,
+  shareLink,
   shareMessage,
   tutorialSeenLocal,
   userName,
@@ -64,7 +76,7 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | 'leaders' | null>(null); // экран поверх меню или паузы
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | 'leaders' | 'friends' | null>(null); // экран поверх меню или паузы
   const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
   const progressRef = useRef(progress);
   const runRef = useRef<RunStats>(emptyRunStats()); // статистика партии для заданий и монет
@@ -74,6 +86,8 @@ export default function App() {
   const [rank, setRank] = useState<number | null>(null); // место в таблице лидеров после партии
   const submitRef = useRef(0); // номер отправки рекорда: ответ на старую не должен попасть в новую партию
   const [share, setShare] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle');
+  const [referrals, setReferrals] = useState<Referrals | null>(null); // друзья по ссылке; null — ещё не знаем или сервера нет
+  const [referralsAsked, setReferralsAsked] = useState(false); // сервер уже ответил (или не ответил) хотя бы раз
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -145,6 +159,26 @@ export default function App() {
     },
     [commitProgress],
   );
+
+  // Сколько друзей пришло — при запуске и при каждом открытии экрана «Друзья»
+  useEffect(() => {
+    if (!canSubmit || (overlay !== null && overlay !== 'friends')) return;
+    fetchReferrals().then((r) => {
+      if (r) setReferrals(r);
+      setReferralsAsked(true);
+    });
+  }, [overlay]);
+
+  const claimFriends = useCallback(async () => {
+    const claimed = await claimReferrals();
+    if (!claimed) return;
+    const p = progressRef.current;
+    commitProgress({ coins: p.coins + claimed * REFERRAL.reward });
+    setReferrals((r) => r && { ...r, unclaimed: 0 });
+    unlockAudio();
+    sfx.powerUp();
+    haptic.notify('success');
+  }, [commitProgress]);
 
   const daily = dailyState(progress.daily);
   const dailyAvailable = cloudReady && daily.available;
@@ -467,9 +501,21 @@ export default function App() {
             </button>
           </div>
           {apiEnabled && (
-            <button className="btn ghost" onClick={() => setOverlay('leaders')}>
-              🏆 Лидеры
-            </button>
+            <div className="menu-row">
+              <button className="btn ghost" onClick={() => setOverlay('leaders')}>
+                🏆 Лидеры
+              </button>
+              {canSubmit && (
+                <button className="btn ghost" onClick={() => setOverlay('friends')}>
+                  👥 Друзья
+                  {!!referrals?.unclaimed && (
+                    <span className="badge" aria-label={`Новых друзей: ${referrals.unclaimed}`}>
+                      {referrals.unclaimed}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
           )}
           {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
           {progress.coins > 0 && (
@@ -502,6 +548,15 @@ export default function App() {
       )}
 
       {overlay === 'leaders' && <LeadersScreen onClose={() => setOverlay(null)} />}
+
+      {overlay === 'friends' && (
+        <FriendsScreen
+          referrals={referrals}
+          asked={referralsAsked}
+          onClaim={claimFriends}
+          onClose={() => setOverlay(null)}
+        />
+      )}
 
       {questToast && phase === 'playing' && (
         <div className="quest-toast" role="status">
@@ -843,6 +898,57 @@ function LeadersScreen({ onClose }: { onClose: () => void }) {
         </p>
       )}
       <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
+  );
+}
+
+const INVITE_TEXT = 'Полетели со мной в «Небесный патруль» — сбивать пришельцев!';
+
+function FriendsScreen({
+  referrals,
+  asked,
+  onClaim,
+  onClose,
+}: {
+  referrals: Referrals | null;
+  asked: boolean;
+  onClaim: () => void;
+  onClose: () => void;
+}) {
+  const link = referrals?.link;
+  const unclaimed = referrals?.unclaimed ?? 0;
+  return (
+    <Screen>
+      <h2 className="title small">Друзья</h2>
+      <p className="subtitle">
+        Позови друга по своей ссылке. Когда друг сыграет первую партию, ты получишь <CoinIcon />
+        {REFERRAL.reward}.
+      </p>
+      {referrals && <p className="best">Пришло по твоей ссылке: {referrals.invited}</p>}
+      {unclaimed > 0 && (
+        <button className="btn primary" onClick={onClaim}>
+          Забрать <CoinIcon />
+          {unclaimed * REFERRAL.reward}
+        </button>
+      )}
+      {link ? (
+        <button
+          className={`btn ${unclaimed > 0 ? 'ghost' : 'primary'}`}
+          onClick={() => {
+            haptic.impact('light');
+            shareLink(link, INVITE_TEXT);
+          }}
+        >
+          Пригласить друга
+        </button>
+      ) : (
+        <p className="subtitle">
+          {referrals ? 'Приглашения пока недоступны.' : asked ? 'Сервер сейчас недоступен. Попробуй позже.' : 'Загрузка…'}
+        </p>
+      )}
+      <button className="btn ghost" onClick={onClose}>
         Готово
       </button>
     </Screen>

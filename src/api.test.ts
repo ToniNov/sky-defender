@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLeaderboard, parseShare, parseSubmit } from './api';
+import { parseClaim, parseLeaderboard, parseReferrals, parseShare, parseSubmit } from './api';
 
 describe('parseLeaderboard', () => {
   it('нормальный ответ сервера', () => {
@@ -30,5 +30,27 @@ describe('parseShare', () => {
   it('id подготовленного сообщения', () => {
     expect(parseShare({ id: 'abc' })).toBe('abc');
     for (const data of [null, {}, { id: '' }, { id: 5 }]) expect(parseShare(data)).toBeNull();
+  });
+});
+
+describe('parseReferrals', () => {
+  it('ссылка и счётчики друзей', () => {
+    const data = { link: 'https://t.me/b/play?startapp=ref_1', invited: 3, unclaimed: 1 };
+    expect(parseReferrals(data)).toEqual(data);
+    expect(parseReferrals({ link: null, invited: 0, unclaimed: 0 })).toEqual({ link: null, invited: 0, unclaimed: 0 });
+  });
+
+  it('ответ не той формы', () => {
+    for (const data of [null, {}, { invited: 1 }, { invited: 1, unclaimed: 2 }, { invited: '1', unclaimed: 0 }]) {
+      expect(parseReferrals(data)).toBeNull();
+    }
+  });
+});
+
+describe('parseClaim', () => {
+  it('сколько друзей засчитать', () => {
+    expect(parseClaim({ claimed: 2 })).toBe(2);
+    expect(parseClaim({ claimed: 0 })).toBe(0);
+    for (const data of [null, {}, { claimed: -1 }, { claimed: 1.5 }]) expect(parseClaim(data)).toBeNull();
   });
 });

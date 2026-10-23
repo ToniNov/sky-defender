@@ -12,7 +12,7 @@ export interface TelegramUser {
 }
 
 export type InitDataResult =
-  | { ok: true; user: TelegramUser; authDate: number }
+  | { ok: true; user: TelegramUser; authDate: number; startParam?: string }
   | { ok: false; reason: 'no-hash' | 'bad-hash' | 'expired' | 'no-user' };
 
 /** Сколько секунд initData считается свежей. */
@@ -79,5 +79,6 @@ export async function verifyInitData(
 
   const user = parseUser(params.get('user'));
   if (!user) return { ok: false, reason: 'no-user' };
-  return { ok: true, user, authDate };
+  const startParam = params.get('start_param'); // параметр startapp из ссылки, по которой открыли игру
+  return startParam ? { ok: true, user, authDate, startParam } : { ok: true, user, authDate };
 }
