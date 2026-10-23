@@ -8,6 +8,7 @@
 | `GET /api/health` | `{ ok: true }` |
 | `GET /api/leaderboard` | `{ top: [{ name, score }], me: { rank, score } \| null }` — топ-50; `me` только с Authorization |
 | `POST /api/score` | тело `{ score }` → `{ best, rank }`; хранится лучший результат игрока |
+| `POST /api/share` | тело `{ score }` → `{ id }`: сообщение с результатом, подготовленное через Bot API `savePreparedInlineMessage`; игра открывает его в `WebApp.shareMessage(id)` |
 
 ## Локально
 
@@ -29,6 +30,9 @@ npm run api:migrate                        # таблицы в боевой ба
 npx wrangler secret put BOT_TOKEN -c worker/wrangler.toml   # токен бота от @BotFather
 npm run api:deploy                         # выдаст адрес вида https://sky-defender-api.<аккаунт>.workers.dev
 ```
+
+Для «Поделиться результатом» впиши в `APP_URL` (`wrangler.toml`) ссылку на мини-апп из BotFather,
+например `https://t.me/<бот>/<приложение>`: она станет кнопкой «Играть» в сообщении. Пока там пусто, `/api/share` отвечает 503.
 
 Адрес воркера игра берёт при сборке из `VITE_API_URL`. Для GitHub Pages:
 **Settings → Secrets and variables → Actions → Variables → New repository variable**, имя `API_URL`,

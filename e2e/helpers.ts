@@ -62,3 +62,48 @@ export async function pickUp(page: Page, kind: string) {
   await spawnPowerUp(page, kind, player.x, player.y);
   await expect.poll(async () => (await snapshot(page)).score).toBeGreaterThanOrEqual(score + POWER_UP.points);
 }
+
+/** Подменённый Telegram: что игра передала в shareMessage и что «ответил» пользователь. */
+declare global {
+  interface Window {
+    __shared?: string[];
+    __shareSent?: boolean;
+  }
+}
+
+/**
+ * Притвориться, что игра открыта в Telegram: есть initData (подпись проверяет сервер, а его подменяют тесты).
+ * version — версия Bot API клиента; shareMessage запоминает id и сразу «отправляет» (window.__shareSent).
+ */
+export async function fakeTelegram(page: Page, { version = '6.0' } = {}): Promise<string> {
+  const initData = 'auth_date=1&user=%7B%22id%22%3A42%7D&hash=test';
+  await page.addInitScript(
+    ([data, ver]) => {
+      const noop = () => {};
+      const atLeast = (v: string) => {
+        const [a, b] = v.split('.').map(Number);
+        const [x, y] = ver.split('.').map(Number);
+        return x > a || (x === a && y >= b);
+      };
+      window.__shared = [];
+      window.__shareSent = true;
+      Object.assign(window, {
+        Telegram: {
+          WebApp: {
+            initData: data,
+            initDataUnsafe: {},
+            ready: noop,
+            expand: noop,
+            isVersionAtLeast: atLeast,
+            shareMessage: (id: string, cb?: (sent: boolean) => void) => {
+              window.__shared!.push(id);
+              cb?.(window.__shareSent!);
+            },
+          },
+        },
+      });
+    },
+    [initData, version] as const,
+  );
+  return initData;
+}

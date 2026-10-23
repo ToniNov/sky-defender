@@ -1,25 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { SAVE_VERSION } from '../src/progress.ts';
-import { snapshot } from './helpers.ts';
+import { fakeTelegram, snapshot } from './helpers.ts';
 
 // Адрес API задан в playwright.config.ts; сам сервер подменяем — тесты не зависят от сети
 const API = 'http://api.test';
-const INIT_DATA = 'auth_date=1&user=%7B%22id%22%3A42%7D&hash=test';
 
 async function open(page: Page) {
   await page.route(/telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Взлететь' })).toBeVisible();
-}
-
-/** Притвориться, что игра открыта в Telegram: есть подписанная initData. */
-async function fakeTelegram(page: Page) {
-  await page.addInitScript((initData) => {
-    const noop = () => {};
-    Object.assign(window, {
-      Telegram: { WebApp: { initData, initDataUnsafe: {}, ready: noop, expand: noop, isVersionAtLeast: () => false } },
-    });
-  }, INIT_DATA);
 }
 
 test('таблица лидеров из ответа сервера', async ({ page }) => {
@@ -56,7 +45,7 @@ test('в Telegram рекорд уходит на сервер после пар�
   await page.addInitScript((json) => {
     if (!localStorage.getItem('progress')) localStorage.setItem('progress', json);
   }, JSON.stringify({ v: SAVE_VERSION, best: 1200, coins: 0, t: 1 }));
-  await fakeTelegram(page);
+  const initData = await fakeTelegram(page);
   const sent: { auth: string | undefined; body: unknown }[] = [];
   await page.route(`${API}/api/score`, async (r) => {
     // предзапрос CORS: браузер спрашивает, можно ли слать заголовок Authorization
@@ -76,5 +65,5 @@ test('в Telegram рекорд уходит на сервер после пар�
 
   await expect(page.getByText('Место в таблице лидеров: 7')).toBeVisible();
   // рекорд из сохранения больше очков партии — отправляется он
-  expect(sent).toEqual([{ auth: `tma ${INIT_DATA}`, body: { score: 1200 } }]);
+  expect(sent).toEqual([{ auth: `tma ${initData}`, body: { score: 1200 } }]);
 });

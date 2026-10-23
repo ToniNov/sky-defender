@@ -712,6 +712,11 @@
   border: 1px solid var(--line);
 }
 
+.btn.ghost:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .hints {
   list-style: none;
   margin: 8px 0 0;

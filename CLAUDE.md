@@ -37,7 +37,7 @@ src/
   index.css        цветовые токены, safe-area отступы, фон
   audio.ts         звуки и музыка (синтез через Web Audio, файлов нет); звук включается из жеста — `unlockAudio()`
   telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, чтение/запись localStorage + CloudStorage
-  api.ts           запросы к серверу (worker/): таблица лидеров, отправка рекорда; адрес — VITE_API_URL, без него выключено
+  api.ts           запросы к серверу (worker/): таблица лидеров, отправка рекорда, подготовка «Поделиться»; адрес — VITE_API_URL, без него выключено
   progress.ts      сохранение прогресса (рекорд, монеты, улучшения, скины, задания): JSON с версией и миграциями
   quests.ts        задания: статистика партии, зачисление прогресса, выдача следующего — чистые функции
   daily.ts         ежедневная награда: серия дней — чистые функции
@@ -66,6 +66,7 @@ worker/            API на Cloudflare Workers (свой tsconfig.worker.json, �
   src/index.ts       маршруты: /api/health, /api/leaderboard, /api/score; CORS
   src/initData.ts    проверка подписи Telegram initData — чистые функции + тест
   src/players.ts     имя для таблицы, проверка присланных очков + тест
+  src/share.ts       сообщение «Поделиться результатом» для Bot API savePreparedInlineMessage + тест
   migrations/        SQL-миграции D1 (новая схема — новый файл 000N_*.sql)
   wrangler.toml      конфиг воркера: база D1, ALLOWED_ORIGINS
 ROADMAP.md         план развития по версиям — задачи брать отсюда

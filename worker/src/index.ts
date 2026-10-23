@@ -5,14 +5,17 @@
  *   GET  /api/health       — жив ли сервер
  *   GET  /api/leaderboard  — топ игроков; с заголовком Authorization ещё и своё место
  *   POST /api/score        — { score } после партии; сохраняется лучший результат
+ *   POST /api/share        — { score } → { id } подготовленного сообщения для WebApp.shareMessage
  */
 import { type TelegramUser, verifyInitData } from './initData';
 import { displayName, parseScore } from './players';
+import { preparedMessageId, shareResult } from './share';
 
 export interface Env {
   DB: D1Database;
   BOT_TOKEN: string; // секрет: wrangler secret put BOT_TOKEN, локально — worker/.dev.vars
   ALLOWED_ORIGINS: string; // через запятую: откуда игре можно ходить в API
+  APP_URL: string; // ссылка на мини-апп (https://t.me/<бот>/<приложение>) для кнопки «Играть»; пусто — делиться нельзя
 }
 
 const LEADERBOARD_SIZE = 50;
@@ -94,6 +97,32 @@ async function submitScore(request: Request, env: Env): Promise<Response> {
   return json({ best, rank: await rankOf(env, best) });
 }
 
+async function share(request: Request, env: Env): Promise<Response> {
+  const user = await authUser(request, env);
+  if (!user) return fail('unauthorized', 401);
+  if (!env.APP_URL) return fail('share-disabled', 503);
+  const score = parseScore(await request.json().catch(() => null));
+  if (score === null) return fail('bad-score', 400);
+
+  const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/savePreparedInlineMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: user.id,
+      result: shareResult(user, score, env.APP_URL),
+      allow_user_chats: true,
+      allow_group_chats: true,
+    }),
+  });
+  const data: unknown = await res.json().catch(() => null);
+  const id = preparedMessageId(data);
+  if (!id) {
+    console.error('savePreparedInlineMessage', res.status, data);
+    return fail('telegram-error', 502);
+  }
+  return json({ id });
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const cors = corsHeaders(request, env);
@@ -106,6 +135,7 @@ export default {
       if (route === 'GET /api/health') response = json({ ok: true });
       else if (route === 'GET /api/leaderboard') response = await leaderboard(request, env);
       else if (route === 'POST /api/score') response = await submitScore(request, env);
+      else if (route === 'POST /api/share') response = await share(request, env);
       else response = fail('not-found', 404);
     } catch (err) {
       console.error(err);

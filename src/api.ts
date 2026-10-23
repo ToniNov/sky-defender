@@ -61,6 +61,20 @@ export async function fetchLeaderboard(): Promise<Leaderboard | null> {
   return parseLeaderboard(await request('/api/leaderboard'));
 }
 
+/** Проверить ответ /api/share; null — ответ не той формы. */
+export function parseShare(data: unknown): string | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const { id } = data as { id?: unknown };
+  return typeof id === 'string' && id !== '' ? id : null;
+}
+
+/** Попросить сервер подготовить сообщение с результатом; вернёт id для shareMessage. */
+export async function prepareShare(score: number): Promise<string | null> {
+  if (!canSubmit) return null;
+  const body = JSON.stringify({ score });
+  return parseShare(await request('/api/share', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } }));
+}
+
 /** Отправить рекорд. Сервер хранит лучший результат, так что слать можно сколько угодно раз. */
 export async function submitScore(score: number): Promise<{ best: number; rank: number } | null> {
   if (!canSubmit) return null;

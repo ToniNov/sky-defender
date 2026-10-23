@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLeaderboard, parseSubmit } from './api';
+import { parseLeaderboard, parseShare, parseSubmit } from './api';
 
 describe('parseLeaderboard', () => {
   it('нормальный ответ сервера', () => {
@@ -23,5 +23,12 @@ describe('parseSubmit', () => {
     expect(parseSubmit({ best: 500, rank: 3 })).toEqual({ best: 500, rank: 3 });
     expect(parseSubmit({ best: 500 })).toBeNull();
     expect(parseSubmit(null)).toBeNull();
+  });
+});
+
+describe('parseShare', () => {
+  it('id подготовленного сообщения', () => {
+    expect(parseShare({ id: 'abc' })).toBe('abc');
+    for (const data of [null, {}, { id: '' }, { id: 5 }]) expect(parseShare(data)).toBeNull();
   });
 });

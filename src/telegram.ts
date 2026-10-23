@@ -15,6 +15,7 @@ interface TelegramWebApp {
   disableVerticalSwipes?(): void;
   setHeaderColor?(color: string): void;
   setBackgroundColor?(color: string): void;
+  shareMessage?(msgId: string, cb?: (sent: boolean) => void): void;
   HapticFeedback?: {
     impactOccurred(style: ImpactStyle): void;
     notificationOccurred(type: NotificationType): void;
@@ -76,6 +77,16 @@ export const haptic = {
 };
 
 export const backButton = supports('6.1') ? tg?.BackButton : undefined;
+
+/** Окно «Поделиться» есть с Bot API 8.0. */
+export const canShareMessage = supports('8.0') && !!tg?.shareMessage;
+
+/** Открыть выбор чата для сообщения, которое подготовил сервер. true — сообщение отправлено. */
+export function shareMessage(msgId: string): Promise<boolean> {
+  const share = tg?.shareMessage;
+  if (!canShareMessage || !share) return Promise.resolve(false);
+  return new Promise((resolve) => share.call(tg, msgId, (sent) => resolve(sent)));
+}
 
 // ───── Хранилище: localStorage + облако Telegram (синхронизируется между устройствами) ─────
 

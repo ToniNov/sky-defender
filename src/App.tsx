@@ -1,7 +1,7 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
-import { apiEnabled, fetchLeaderboard, submitScore, type Leaderboard } from './api';
+import { apiEnabled, canSubmit, fetchLeaderboard, prepareShare, submitScore, type Leaderboard } from './api';
 import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
 import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
 import {
@@ -31,6 +31,7 @@ import type { Loadout, WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
   backButton,
+  canShareMessage,
   DEFAULT_SETTINGS,
   haptic,
   initTelegram,
@@ -39,6 +40,7 @@ import {
   saveSettings,
   saveTutorialSeen,
   setHapticEnabled,
+  shareMessage,
   tutorialSeenLocal,
   userName,
   type Settings,
@@ -47,6 +49,8 @@ import './App.css';
 
 const TUTORIAL_MAX_MS = 8000;
 const QUEST_TOAST_MS = 2600;
+/** «Поделиться» работает только в Telegram, с сервером и новым клиентом (Bot API 8.0+). */
+const canShare = canSubmit && canShareMessage;
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('menu');
@@ -69,6 +73,7 @@ export default function App() {
   const [questToast, setQuestToast] = useState<Quest | null>(null);
   const [rank, setRank] = useState<number | null>(null); // место в таблице лидеров после партии
   const submitRef = useRef(0); // номер отправки рекорда: ответ на старую не должен попасть в новую партию
+  const [share, setShare] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle');
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -198,6 +203,7 @@ export default function App() {
   const start = useCallback(() => {
     setNewRecord(false);
     setRank(null);
+    setShare('idle');
     submitRef.current++;
     runRef.current = emptyRunStats();
     bankedRef.current = emptyRunStats();
@@ -209,6 +215,20 @@ export default function App() {
     haptic.impact('medium');
     unlockAudio();
   }, []);
+
+  /** Сервер готовит сообщение с очками партии, Telegram открывает выбор чата. */
+  const shareScore = useCallback(async () => {
+    setShare('busy');
+    haptic.impact('light');
+    const id = await prepareShare(score);
+    if (!id) {
+      setShare('failed');
+      return;
+    }
+    const sent = await shareMessage(id);
+    setShare(sent ? 'sent' : 'idle'); // закрыл окно, не выбрав чат, — можно нажать ещё раз
+    if (sent) haptic.notify('success');
+  }, [score]);
 
   const updateSettings = useCallback((next: Settings) => {
     setSettings(next);
@@ -524,6 +544,12 @@ export default function App() {
           <button className="btn primary" onClick={start}>
             Ещё раз
           </button>
+          {canShare && (
+            <button className="btn ghost" disabled={share === 'busy' || share === 'sent'} onClick={shareScore}>
+              {share === 'sent' ? '✓ Отправлено' : '📤 Поделиться результатом'}
+            </button>
+          )}
+          {share === 'failed' && <p className="best">Не получилось поделиться. Попробуй ещё раз.</p>}
           <button className="btn ghost" onClick={() => setPhase('menu')}>
             В меню
           </button>
