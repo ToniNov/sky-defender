@@ -281,6 +281,13 @@
   color: var(--gold);
 }
 
+/* своя строка в таблице друзей */
+.leader.me {
+  border-radius: 10px;
+  border-bottom-color: transparent;
+  background: rgba(255, 210, 63, 0.12);
+}
+
 .leader-name {
   flex: 1;
   min-width: 0;

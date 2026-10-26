@@ -10,6 +10,7 @@ import {
   prepareShare,
   startRun,
   submitScore,
+  type LeaderEntry,
   type Leaderboard,
   type Referrals,
 } from './api';
@@ -549,7 +550,7 @@ export default function App() {
         <QuestsScreen quests={progress.quests.active} onClaim={claimQuestAt} onClose={() => setOverlay(null)} />
       )}
 
-      {overlay === 'leaders' && <LeadersScreen onClose={() => setOverlay(null)} />}
+      {overlay === 'leaders' && <LeadersScreen onInvite={() => setOverlay('friends')} onClose={() => setOverlay(null)} />}
 
       {overlay === 'friends' && (
         <FriendsScreen
@@ -865,8 +866,23 @@ function SkinGrid({ progress, onPick }: { progress: Progress; onPick: (skin: Ski
   );
 }
 
-function LeadersScreen({ onClose }: { onClose: () => void }) {
+function LeaderList({ entries }: { entries: (LeaderEntry & { me?: boolean })[] }) {
+  return (
+    <ol className="leaders">
+      {entries.map((e, i) => (
+        <li className={e.me ? 'leader me' : 'leader'} key={i}>
+          <span className="leader-rank">{i + 1}</span>
+          <span className="leader-name">{e.me ? `${e.name} (ты)` : e.name}</span>
+          <span className="leader-score">{e.score}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function LeadersScreen({ onInvite, onClose }: { onInvite: () => void; onClose: () => void }) {
   const [board, setBoard] = useState<Leaderboard | null | 'loading'>('loading');
+  const [tab, setTab] = useState<'all' | 'friends'>('all');
   useEffect(() => {
     let open = true;
     fetchLeaderboard().then((b) => open && setBoard(b));
@@ -874,29 +890,46 @@ function LeadersScreen({ onClose }: { onClose: () => void }) {
       open = false;
     };
   }, []);
+  const loaded = board !== 'loading' && board !== null ? board : null;
+  // друзей видно только в Telegram: вне него сервер не знает, кто ты
+  const friends = loaded?.friends ?? null;
   return (
     <Screen>
       <h2 className="title small">Лидеры</h2>
+      {friends && (
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
+            Все
+          </button>
+          <button role="tab" aria-selected={tab === 'friends'} onClick={() => setTab('friends')}>
+            Друзья
+          </button>
+        </div>
+      )}
       {board === 'loading' ? (
         <p className="subtitle">Загрузка…</p>
       ) : board === null ? (
         <p className="subtitle">Таблица сейчас недоступна. Попробуй позже.</p>
+      ) : tab === 'friends' && friends ? (
+        <>
+          {friends.length > 0 && <LeaderList entries={friends} />}
+          {!friends.some((f) => !f.me) && (
+            <>
+              <p className="subtitle">Позови друзей по своей ссылке — здесь появятся их рекорды.</p>
+              <button className="btn ghost" onClick={onInvite}>
+                Позвать друзей
+              </button>
+            </>
+          )}
+        </>
       ) : board.top.length === 0 ? (
         <p className="subtitle">Пока здесь никого нет — стань первым!</p>
       ) : (
-        <ol className="leaders">
-          {board.top.map((e, i) => (
-            <li className="leader" key={i}>
-              <span className="leader-rank">{i + 1}</span>
-              <span className="leader-name">{e.name}</span>
-              <span className="leader-score">{e.score}</span>
-            </li>
-          ))}
-        </ol>
+        <LeaderList entries={board.top} />
       )}
-      {board && board !== 'loading' && board.me && (
+      {tab === 'all' && loaded?.me && (
         <p className="record">
-          Твоё место: {board.me.rank} · {board.me.score}
+          Твоё место: {loaded.me.rank} · {loaded.me.score}
         </p>
       )}
       <button className="btn primary" onClick={onClose}>

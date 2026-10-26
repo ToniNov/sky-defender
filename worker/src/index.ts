@@ -3,7 +3,7 @@
  * Игрок подтверждается заголовком `Authorization: tma <initData>` — подпись проверяет verifyInitData.
  *
  *   GET  /api/health       — жив ли сервер
- *   GET  /api/leaderboard  — топ игроков; с заголовком Authorization ещё и своё место
+ *   GET  /api/leaderboard  — топ игроков; с заголовком Authorization ещё своё место и таблица среди друзей
  *   POST /api/run          — партия началась: сервер запоминает время старта
  *   POST /api/score        — { score } после партии; принимается, если столько можно набрать за время партии
  *   POST /api/share       — { score } → { id } подготовленного сообщения для WebApp.shareMessage
@@ -74,13 +74,40 @@ async function leaderboard(request: Request, env: Env): Promise<Response> {
 
   const user = (await authorize(request, env))?.user;
   let me: { rank: number; score: number } | null = null;
+  let friends: FriendRow[] | null = null;
   if (user) {
     const row = await env.DB.prepare('SELECT best_score FROM players WHERE id = ?')
       .bind(user.id)
       .first<{ best_score: number }>();
     if (row && row.best_score > 0) me = { rank: await rankOf(env, row.best_score), score: row.best_score };
+    friends = await friendsBoard(env, user.id);
   }
-  return json({ top: results, me });
+  return json({ top: results, me, friends });
+}
+
+interface FriendRow extends LeaderRow {
+  me: boolean;
+}
+
+const FRIENDS_SIZE = 100;
+
+/** Таблица среди друзей: сам игрок, кого он пригласил и кто пригласил его. Сам игрок — даже без очков. */
+async function friendsBoard(env: Env, playerId: number): Promise<FriendRow[]> {
+  const { results } = await env.DB.prepare(
+    `WITH circle (id) AS (
+       SELECT ?1
+       UNION SELECT invitee_id FROM referrals WHERE referrer_id = ?1
+       UNION SELECT referrer_id FROM referrals WHERE invitee_id = ?1
+     )
+     SELECT p.name, p.best_score AS score, p.id = ?1 AS me
+     FROM players p JOIN circle c ON c.id = p.id
+     WHERE p.best_score > 0 OR p.id = ?1
+     ORDER BY p.best_score DESC, p.updated_at ASC
+     LIMIT ?2`,
+  )
+    .bind(playerId, FRIENDS_SIZE)
+    .all<{ name: string; score: number; me: number }>();
+  return results.map((r) => ({ name: r.name, score: r.score, me: r.me === 1 }));
 }
 
 /** Засчитать друга пригласившему — только если тот сам уже играл. Повторно не засчитывается (invitee_id — ключ). */
