@@ -5,7 +5,7 @@ compatibility_date = "2026-10-01"
 
 [vars]
 ALLOWED_ORIGINS = "https://toninov.github.io,http://localhost:5173"
-APP_URL = "" # ссылка на мини-апп из BotFather, например https://t.me/<бот>/<приложение>; пусто — «Поделиться» выключено
+APP_URL = "https://t.me/sky_patrol_game_bot" # ссылка на мини-апп из BotFather, например https://t.me/<бот>/<приложение>; пусто — «Поделиться» выключено
 
 [[d1_databases]]
 binding = "DB"
