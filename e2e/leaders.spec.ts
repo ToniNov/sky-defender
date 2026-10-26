@@ -41,20 +41,21 @@ test('сервер недоступен — понятное сообщение,
   await expect(page.getByText('Таблица сейчас недоступна')).toBeVisible();
 });
 
-test('в Telegram рекорд уходит на сервер после партии, место видно на экране', async ({ page }) => {
+test('в Telegram партия засекается на сервере, её очки уходят после партии, место видно на экране', async ({ page }) => {
   await page.addInitScript((json) => {
     if (!localStorage.getItem('progress')) localStorage.setItem('progress', json);
   }, JSON.stringify({ v: SAVE_VERSION, best: 1200, coins: 0, t: 1 }));
   const initData = await fakeTelegram(page);
-  const sent: { auth: string | undefined; body: unknown }[] = [];
-  await page.route(`${API}/api/score`, async (r) => {
+  const sent: { path: string; auth: string | undefined; body: unknown }[] = [];
+  await page.route(/\/api\/(run|score)$/, async (r) => {
     // предзапрос CORS: браузер спрашивает, можно ли слать заголовок Authorization
     if (r.request().method() === 'OPTIONS') {
       return r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' } });
     }
+    const path = new URL(r.request().url()).pathname;
     const auth = (await r.request().headerValue('authorization')) ?? undefined;
-    sent.push({ auth, body: r.request().postDataJSON() });
-    return r.fulfill({ json: { best: 1200, rank: 7 } });
+    sent.push({ path, auth, body: r.request().postDataJSON() });
+    return r.fulfill({ json: path === '/api/run' ? { ok: true } : { best: 1200, rank: 7 } });
   });
 
   await open(page);
@@ -64,6 +65,9 @@ test('в Telegram рекорд уходит на сервер после пар�
   expect((await snapshot(page)).alive).toBe(false);
 
   await expect(page.getByText('Место в таблице лидеров: 7')).toBeVisible();
-  // рекорд из сохранения больше очков партии — отправляется он
-  expect(sent).toEqual([{ auth: `tma ${initData}`, body: { score: 1200 } }]);
+  // сначала старт партии, потом её очки — не рекорд из сохранения: его сервер проверить не может
+  expect(sent).toEqual([
+    { path: '/api/run', auth: `tma ${initData}`, body: null },
+    { path: '/api/score', auth: `tma ${initData}`, body: { score: 0 } },
+  ]);
 });

@@ -8,6 +8,7 @@ import {
   fetchLeaderboard,
   fetchReferrals,
   prepareShare,
+  startRun,
   submitScore,
   type Leaderboard,
   type Referrals,
@@ -245,6 +246,7 @@ export default function App() {
     setQuestToast(null);
     setTutorial(!tutorialSeenRef.current);
     setSession((s) => s + 1);
+    startRun();
     setPhase('playing');
     haptic.impact('medium');
     unlockAudio();
@@ -330,9 +332,9 @@ export default function App() {
         const record = final > progressRef.current.best;
         bank(final);
         setNewRecord(record);
-        // Шлём рекорд, а не очки партии: так на сервер попадёт и рекорд, поставленный до таблицы лидеров
+        // Шлём очки партии: сервер проверяет, можно ли их набрать за время с начала партии
         const id = ++submitRef.current;
-        submitScore(progressRef.current.best).then((r) => {
+        submitScore(final).then((r) => {
           if (r && id === submitRef.current) setRank(r.rank);
         });
         setPhase('over');
