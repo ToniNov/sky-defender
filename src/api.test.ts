@@ -3,14 +3,33 @@ import { parseClaim, parseLeaderboard, parseReferrals, parseShare, parseSubmit }
 
 describe('parseLeaderboard', () => {
   it('нормальный ответ сервера', () => {
-    const data = { top: [{ name: 'Мария', score: 900 }], me: { rank: 2, score: 500 } };
+    const data = {
+      top: [{ name: 'Мария', score: 900 }],
+      me: { rank: 2, score: 500 },
+      friends: [
+        { name: 'Мария', score: 900, me: false },
+        { name: 'Антон', score: 500, me: true },
+      ],
+    };
     expect(parseLeaderboard(data)).toEqual(data);
-    expect(parseLeaderboard({ top: [], me: null })).toEqual({ top: [], me: null });
+    expect(parseLeaderboard({ top: [], me: null, friends: null })).toEqual({ top: [], me: null, friends: null });
+  });
+
+  it('старый сервер без друзей — friends: null', () => {
+    expect(parseLeaderboard({ top: [], me: null })).toEqual({ top: [], me: null, friends: null });
   });
 
   it('битые строки отбрасываются, битое «моё место» — null', () => {
-    const data = { top: [{ name: 'Ок', score: 10 }, { name: 5, score: 1 }, null, { name: 'Б', score: '7' }], me: { rank: '1' } };
-    expect(parseLeaderboard(data)).toEqual({ top: [{ name: 'Ок', score: 10 }], me: null });
+    const data = {
+      top: [{ name: 'Ок', score: 10 }, { name: 5, score: 1 }, null, { name: 'Б', score: '7' }],
+      me: { rank: '1' },
+      friends: [{ name: 'Друг', score: 3, me: 'да' }, { score: 1 }],
+    };
+    expect(parseLeaderboard(data)).toEqual({
+      top: [{ name: 'Ок', score: 10 }],
+      me: null,
+      friends: [{ name: 'Друг', score: 3, me: false }],
+    });
   });
 
   it('ответ не той формы', () => {

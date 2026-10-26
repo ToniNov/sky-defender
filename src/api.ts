@@ -17,25 +17,35 @@ export interface LeaderEntry {
   score: number;
 }
 
+export interface FriendEntry extends LeaderEntry {
+  /** Строка самого игрока. */
+  me: boolean;
+}
+
 export interface Leaderboard {
   top: LeaderEntry[];
   /** Своё место; null — ещё не играл или открыто вне Telegram. */
   me: { rank: number; score: number } | null;
+  /** Таблица среди друзей вместе с самим игроком; null — открыто вне Telegram. */
+  friends: FriendEntry[] | null;
 }
 
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 
+const isEntry = (e: unknown): e is LeaderEntry =>
+  typeof e === 'object' && e !== null && typeof (e as LeaderEntry).name === 'string' && isInt((e as LeaderEntry).score);
+
 /** Проверить ответ /api/leaderboard; null — ответ не той формы. */
 export function parseLeaderboard(data: unknown): Leaderboard | null {
   if (typeof data !== 'object' || data === null) return null;
-  const { top, me } = data as { top?: unknown; me?: unknown };
+  const { top, me, friends } = data as { top?: unknown; me?: unknown; friends?: unknown };
   if (!Array.isArray(top)) return null;
-  const entries = top.filter(
-    (e): e is LeaderEntry => typeof e === 'object' && e !== null && typeof e.name === 'string' && isInt(e.score),
-  );
   const mine = me as { rank?: unknown; score?: unknown } | null | undefined;
   const okMe = mine && isInt(mine.rank) && isInt(mine.score) ? { rank: mine.rank, score: mine.score } : null;
-  return { top: entries, me: okMe };
+  const okFriends = Array.isArray(friends)
+    ? friends.filter(isEntry).map((e) => ({ name: e.name, score: e.score, me: (e as Partial<FriendEntry>).me === true }))
+    : null;
+  return { top: top.filter(isEntry), me: okMe, friends: okFriends };
 }
 
 /** Проверить ответ /api/score; null — ответ не той формы. */

@@ -6,7 +6,7 @@
 | Запрос | Что делает |
 |---|---|
 | `GET /api/health` | `{ ok: true }` |
-| `GET /api/leaderboard` | `{ top: [{ name, score }], me: { rank, score } \| null }` — топ-50; `me` только с Authorization |
+| `GET /api/leaderboard` | `{ top: [{ name, score }], me: { rank, score } \| null, friends: [{ name, score, me }] \| null }` — топ-50; `me` и `friends` только с Authorization. Друзья — кого игрок пригласил и кто пригласил его, плюс он сам |
 | `POST /api/run` | партия началась: сервер запоминает время старта (одна партия на игрока, новая заменяет прежнюю) |
 | `POST /api/score` | тело `{ score }` → `{ best, rank }`; хранится лучший результат игрока. Нет начатой партии — 409, очков больше, чем можно набрать за время партии, — 422 |
 | `GET /api/referrals` | `{ link, invited, unclaimed }`: ссылка-приглашение `…?startapp=ref_<id>`, сколько друзей пришло, за скольких награда не забрана |
