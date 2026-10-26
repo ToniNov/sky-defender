@@ -8,6 +8,8 @@ type NotificationType = 'error' | 'success' | 'warning';
 
 interface TelegramWebApp {
   initData: string;
+  platform?: string;
+  version?: string;
   initDataUnsafe?: { user?: { first_name?: string } };
   ready(): void;
   expand(): void;
@@ -48,6 +50,8 @@ export const inTelegram = !!tg?.initData;
 export const userName = tg?.initDataUnsafe?.user?.first_name;
 /** Подписанные данные запуска — сервер проверяет по ним, кто играет. Вне Telegram пусто. */
 export const initData = tg?.initData ?? '';
+/** Где открыта игра: «ios 8.0», «android 7.10»; вне Telegram — «web». Для отчётов об ошибках. */
+export const platform = tg?.platform && tg.platform !== 'unknown' ? `${tg.platform} ${tg.version ?? ''}`.trim() : 'web';
 
 const BG = '#0b1026';
 

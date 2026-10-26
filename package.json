@@ -15,6 +15,7 @@
     "api:dev": "wrangler dev -c worker/wrangler.toml",
     "api:deploy": "wrangler deploy -c worker/wrangler.toml",
     "api:migrate": "wrangler d1 migrations apply sky-defender --remote -c worker/wrangler.toml",
+    "api:errors": "wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command \"SELECT datetime(last_seen / 1000, 'unixepoch') AS last, count, version, platform, message, substr(stack, 1, 300) AS stack FROM errors ORDER BY last_seen DESC LIMIT 20\"",
     "api:migrate:local": "wrangler d1 migrations apply sky-defender --local -c worker/wrangler.toml"
   },
   "dependencies": {

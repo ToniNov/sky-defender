@@ -9,7 +9,9 @@
  *   POST /api/share       — { score } → { id } подготовленного сообщения для WebApp.shareMessage
  *   GET  /api/referrals    — { link, invited, unclaimed }: ссылка-приглашение и сколько друзей пришло
  *   POST /api/referrals/claim — { claimed }: за скольких друзей выдать награду (монеты начисляет игра)
+ *   POST /api/errors       — { message, stack, version, platform }: ошибка из игры; без подписи
  */
+import { ERRORS_MAX, errorFingerprint, parseErrorReport } from './errors';
 import { type TelegramUser, verifyInitData } from './initData';
 import { displayName, parseScore, plausibleScore } from './players';
 import { inviteLink, parseReferrer } from './referrals';
@@ -199,6 +201,27 @@ async function share(request: Request, env: Env): Promise<Response> {
   return json({ id });
 }
 
+/** Ошибка из игры. Повтор известной — +1 к счётчику; новая записывается, пока таблица не заполнена. */
+async function reportError(request: Request, env: Env): Promise<Response> {
+  const report = parseErrorReport(await request.json().catch(() => null));
+  if (!report) return fail('bad-report', 400);
+  const fingerprint = errorFingerprint(report);
+  const now = Date.now();
+  const seen = await env.DB.prepare('UPDATE errors SET count = count + 1, last_seen = ? WHERE fingerprint = ?')
+    .bind(now, fingerprint)
+    .run();
+  if (seen.meta.changes === 0) {
+    await env.DB.prepare(
+      `INSERT INTO errors (fingerprint, message, stack, version, platform, first_seen, last_seen)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?6 WHERE (SELECT COUNT(*) FROM errors) < ?7
+       ON CONFLICT (fingerprint) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen`,
+    )
+      .bind(fingerprint, report.message, report.stack, report.version, report.platform, now, ERRORS_MAX)
+      .run();
+  }
+  return json({ ok: true });
+}
+
 async function referrals(request: Request, env: Env): Promise<Response> {
   const user = (await authorize(request, env))?.user;
   if (!user) return fail('unauthorized', 401);
@@ -238,6 +261,7 @@ export default {
       if (route === 'GET /api/health') response = json({ ok: true });
       else if (route === 'GET /api/leaderboard') response = await leaderboard(request, env);
       else if (route === 'POST /api/run') response = await startRun(request, env);
+      else if (route === 'POST /api/errors') response = await reportError(request, env);
       else if (route === 'POST /api/score') response = await submitScore(request, env);
       else if (route === 'POST /api/share') response = await share(request, env);
       else if (route === 'GET /api/referrals') response = await referrals(request, env);
