@@ -11,6 +11,7 @@
 | `POST /api/score` | тело `{ score }` → `{ best, rank }`; хранится лучший результат игрока. Нет начатой партии — 409, очков больше, чем можно набрать за время партии, — 422 |
 | `GET /api/referrals` | `{ link, invited, unclaimed }`: ссылка-приглашение `…?startapp=ref_<id>`, сколько друзей пришло, за скольких награда не забрана |
 | `POST /api/referrals/claim` | `{ claimed }`: отмечает награду забранной; монеты (`REFERRAL.reward` за друга) начисляет игра |
+| `POST /api/errors` | тело `{ message, stack, version, platform }`: ошибка из игры, без подписи. Одинаковые складываются в одну строку со счётчиком, разных хранится не больше 1000 |
 | `POST /api/share` | тело `{ score }` → `{ id }`: сообщение с результатом, подготовленное через Bot API `savePreparedInlineMessage`; игра открывает его в `WebApp.shareMessage(id)` |
 
 ## Локально
@@ -52,3 +53,15 @@ npm run api:deploy                         # выдаст адрес вида ht
 
 Новая таблица или колонка — новый файл `migrations/000N_*.sql`, затем `npm run api:migrate`.
 Домены, с которых игре можно ходить в API, — `ALLOWED_ORIGINS` в `wrangler.toml`.
+
+## Ошибки из игры
+
+Игра сама шлёт необработанные ошибки на `POST /api/errors` (`src/errors.ts`): одну и ту же — раз за сессию, всего не больше 5.
+Последние 20:
+
+```bash
+npm run api:errors
+```
+
+Стек — из собранного (сжатого) кода: по версии в отчёте можно собрать ту же версию и найти место.
+Очистить таблицу: `npx wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command "DELETE FROM errors"`.

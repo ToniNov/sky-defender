@@ -120,6 +120,19 @@ export async function claimReferrals(): Promise<number | null> {
   return parseClaim(await request('/api/referrals/claim', { method: 'POST' }));
 }
 
+export interface ErrorReport {
+  message: string;
+  stack: string;
+  version: string;
+  platform: string;
+}
+
+/** Отправить ошибку на сервер. Без подписи: ошибки бывают и вне Telegram. */
+export async function sendErrorReport(report: ErrorReport): Promise<void> {
+  const body = JSON.stringify(report);
+  await request('/api/errors', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
+}
+
 // Начало партии и её результат уходят строго по очереди: иначе при быстром «Ещё раз»
 // старт новой партии может обогнать результат прежней, и сервер его не примет
 let queue: Promise<unknown> = Promise.resolve();
