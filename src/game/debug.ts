@@ -58,6 +58,8 @@ export interface WorldDebug {
   movePlayer(x: number, y: number): void;
   /** Читы для тестов: игрок не получает урон / не стреляет. Сбрасываются при новой игре. */
   setCheats(cheats: { noDamage?: boolean; holdFire?: boolean }): void;
+  /** Сразу сбить самолёт: партия закончится, как от последнего попадания. */
+  crash(): void;
 }
 
 declare global {

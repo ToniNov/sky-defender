@@ -1,0 +1,14 @@
+# API игры: Cloudflare Workers + D1. Настройка — worker/README.md
+name = "sky-defender-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://toninov.github.io,http://localhost:5173"
+APP_URL = "" # ссылка на мини-апп из BotFather, например https://t.me/<бот>/<приложение>; пусто — «Поделиться» выключено
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sky-defender"
+database_id = "00000000-0000-0000-0000-000000000000" # заменить на id из `wrangler d1 create sky-defender`
+migrations_dir = "migrations"

@@ -1,5 +1,4 @@
-import { QUEST_KINDS, QUESTS, type QuestKind } from './game/balance';
-import type { EnemyKind } from './game/World';
+import { QUEST_KINDS, QUESTS, type EnemyKind, type QuestKind } from './game/balance';
 
 /**
  * Задания: чистые функции без React и хранилища.

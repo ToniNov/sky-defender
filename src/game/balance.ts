@@ -114,6 +114,8 @@ export const ENEMY = {
   },
 } as const;
 
+export type EnemyKind = keyof typeof ENEMY;
+
 /** Задержка первого выстрела обычных врагов. */
 export const ENEMY_FIRST_SHOT: readonly [number, number] = [1.2, 3];
 export const ENEMY_BULLET_R = 5;
@@ -195,6 +197,11 @@ export const upgradeMax = (name: UpgradeName) => UPGRADES[name].costs.length;
 /** Ежедневная награда: монеты за вход несколько дней подряд, после последнего дня — снова с первого. Пропуск дня сбрасывает серию. */
 export const DAILY = {
   rewards: [10, 15, 20, 30, 40, 50, 80],
+} as const;
+
+/** Приглашения: монеты за каждого друга, который пришёл по твоей ссылке и сыграл первую партию. */
+export const REFERRAL = {
+  reward: 100,
 } as const;
 
 /**

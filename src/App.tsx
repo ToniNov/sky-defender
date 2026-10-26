@@ -1,6 +1,17 @@
 import { Application } from '@pixi/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { version } from '../package.json';
+import {
+  apiEnabled,
+  canSubmit,
+  claimReferrals,
+  fetchLeaderboard,
+  fetchReferrals,
+  prepareShare,
+  submitScore,
+  type Leaderboard,
+  type Referrals,
+} from './api';
 import { music, setAudioEnabled, sfx, unlockAudio } from './audio';
 import { dailyReward, dailySlot, dailyState, dayKey } from './daily';
 import {
@@ -16,6 +27,7 @@ import {
 import { Game, type Phase } from './game/Game';
 import {
   DAILY,
+  REFERRAL,
   SKIN_NAMES,
   SKINS,
   UPGRADE_NAMES,
@@ -30,6 +42,7 @@ import type { Loadout, WorldEvents } from './game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from './progress';
 import {
   backButton,
+  canShareMessage,
   DEFAULT_SETTINGS,
   haptic,
   initTelegram,
@@ -38,6 +51,8 @@ import {
   saveSettings,
   saveTutorialSeen,
   setHapticEnabled,
+  shareLink,
+  shareMessage,
   tutorialSeenLocal,
   userName,
   type Settings,
@@ -46,6 +61,8 @@ import './App.css';
 
 const TUTORIAL_MAX_MS = 8000;
 const QUEST_TOAST_MS = 2600;
+/** «Поделиться» работает только в Telegram, с сервером и новым клиентом (Bot API 8.0+). */
+const canShare = canSubmit && canShareMessage;
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('menu');
@@ -59,13 +76,18 @@ export default function App() {
   const [newRecord, setNewRecord] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | null>(null); // экран поверх меню или паузы
+  const [overlay, setOverlay] = useState<'settings' | 'hangar' | 'daily' | 'quests' | 'leaders' | 'friends' | null>(null); // экран поверх меню или паузы
   const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
   const progressRef = useRef(progress);
   const runRef = useRef<RunStats>(emptyRunStats()); // статистика партии для заданий и монет
   const bankedRef = useRef<RunStats>(emptyRunStats()); // она же на момент прошлого зачисления в прогресс
   const toastedRef = useRef(new Set<QuestKind>()); // о каких заданиях уже сказали в этой партии
   const [questToast, setQuestToast] = useState<Quest | null>(null);
+  const [rank, setRank] = useState<number | null>(null); // место в таблице лидеров после партии
+  const submitRef = useRef(0); // номер отправки рекорда: ответ на старую не должен попасть в новую партию
+  const [share, setShare] = useState<'idle' | 'busy' | 'sent' | 'failed'>('idle');
+  const [referrals, setReferrals] = useState<Referrals | null>(null); // друзья по ссылке; null — ещё не знаем или сервера нет
+  const [referralsAsked, setReferralsAsked] = useState(false); // сервер уже ответил (или не ответил) хотя бы раз
   const tutorialSeenRef = useRef(tutorialSeenLocal());
 
   useEffect(() => {
@@ -138,6 +160,26 @@ export default function App() {
     [commitProgress],
   );
 
+  // Сколько друзей пришло — при запуске и при каждом открытии экрана «Друзья»
+  useEffect(() => {
+    if (!canSubmit || (overlay !== null && overlay !== 'friends')) return;
+    fetchReferrals().then((r) => {
+      if (r) setReferrals(r);
+      setReferralsAsked(true);
+    });
+  }, [overlay]);
+
+  const claimFriends = useCallback(async () => {
+    const claimed = await claimReferrals();
+    if (!claimed) return;
+    const p = progressRef.current;
+    commitProgress({ coins: p.coins + claimed * REFERRAL.reward });
+    setReferrals((r) => r && { ...r, unclaimed: 0 });
+    unlockAudio();
+    sfx.powerUp();
+    haptic.notify('success');
+  }, [commitProgress]);
+
   const daily = dailyState(progress.daily);
   const dailyAvailable = cloudReady && daily.available;
 
@@ -194,6 +236,9 @@ export default function App() {
 
   const start = useCallback(() => {
     setNewRecord(false);
+    setRank(null);
+    setShare('idle');
+    submitRef.current++;
     runRef.current = emptyRunStats();
     bankedRef.current = emptyRunStats();
     toastedRef.current.clear();
@@ -204,6 +249,20 @@ export default function App() {
     haptic.impact('medium');
     unlockAudio();
   }, []);
+
+  /** Сервер готовит сообщение с очками партии, Telegram открывает выбор чата. */
+  const shareScore = useCallback(async () => {
+    setShare('busy');
+    haptic.impact('light');
+    const id = await prepareShare(score);
+    if (!id) {
+      setShare('failed');
+      return;
+    }
+    const sent = await shareMessage(id);
+    setShare(sent ? 'sent' : 'idle'); // закрыл окно, не выбрав чат, — можно нажать ещё раз
+    if (sent) haptic.notify('success');
+  }, [score]);
 
   const updateSettings = useCallback((next: Settings) => {
     setSettings(next);
@@ -271,6 +330,11 @@ export default function App() {
         const record = final > progressRef.current.best;
         bank(final);
         setNewRecord(record);
+        // Шлём рекорд, а не очки партии: так на сервер попадёт и рекорд, поставленный до таблицы лидеров
+        const id = ++submitRef.current;
+        submitScore(progressRef.current.best).then((r) => {
+          if (r && id === submitRef.current) setRank(r.rank);
+        });
         setPhase('over');
         haptic.notify(record ? 'success' : 'error');
       },
@@ -436,6 +500,23 @@ export default function App() {
               )}
             </button>
           </div>
+          {apiEnabled && (
+            <div className="menu-row">
+              <button className="btn ghost" onClick={() => setOverlay('leaders')}>
+                🏆 Лидеры
+              </button>
+              {canSubmit && (
+                <button className="btn ghost" onClick={() => setOverlay('friends')}>
+                  👥 Друзья
+                  {!!referrals?.unclaimed && (
+                    <span className="badge" aria-label={`Новых друзей: ${referrals.unclaimed}`}>
+                      {referrals.unclaimed}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
           {progress.best > 0 && <p className="best">Рекорд: {progress.best}</p>}
           {progress.coins > 0 && (
             <p className="wallet" aria-label={`Монеты: ${progress.coins}`}>
@@ -464,6 +545,17 @@ export default function App() {
 
       {overlay === 'quests' && (
         <QuestsScreen quests={progress.quests.active} onClaim={claimQuestAt} onClose={() => setOverlay(null)} />
+      )}
+
+      {overlay === 'leaders' && <LeadersScreen onClose={() => setOverlay(null)} />}
+
+      {overlay === 'friends' && (
+        <FriendsScreen
+          referrals={referrals}
+          asked={referralsAsked}
+          onClaim={claimFriends}
+          onClose={() => setOverlay(null)}
+        />
       )}
 
       {questToast && phase === 'playing' && (
@@ -498,6 +590,7 @@ export default function App() {
           {newRecord && <p className="record">Новый рекорд!</p>}
           <p className="score-big">{score}</p>
           <p className="best">Рекорд: {progress.best}</p>
+          {rank !== null && <p className="best">Место в таблице лидеров: {rank}</p>}
           {runCoins > 0 && (
             <p className="wallet" aria-label={`Собрано монет: ${runCoins}, всего ${progress.coins}`}>
               <CoinIcon />+{runCoins} <span className="wallet-total">всего {progress.coins}</span>
@@ -506,6 +599,12 @@ export default function App() {
           <button className="btn primary" onClick={start}>
             Ещё раз
           </button>
+          {canShare && (
+            <button className="btn ghost" disabled={share === 'busy' || share === 'sent'} onClick={shareScore}>
+              {share === 'sent' ? '✓ Отправлено' : '📤 Поделиться результатом'}
+            </button>
+          )}
+          {share === 'failed' && <p className="best">Не получилось поделиться. Попробуй ещё раз.</p>}
           <button className="btn ghost" onClick={() => setPhase('menu')}>
             В меню
           </button>
@@ -761,6 +860,98 @@ function SkinGrid({ progress, onPick }: { progress: Progress; onPick: (skin: Ski
         );
       })}
     </ul>
+  );
+}
+
+function LeadersScreen({ onClose }: { onClose: () => void }) {
+  const [board, setBoard] = useState<Leaderboard | null | 'loading'>('loading');
+  useEffect(() => {
+    let open = true;
+    fetchLeaderboard().then((b) => open && setBoard(b));
+    return () => {
+      open = false;
+    };
+  }, []);
+  return (
+    <Screen>
+      <h2 className="title small">Лидеры</h2>
+      {board === 'loading' ? (
+        <p className="subtitle">Загрузка…</p>
+      ) : board === null ? (
+        <p className="subtitle">Таблица сейчас недоступна. Попробуй позже.</p>
+      ) : board.top.length === 0 ? (
+        <p className="subtitle">Пока здесь никого нет — стань первым!</p>
+      ) : (
+        <ol className="leaders">
+          {board.top.map((e, i) => (
+            <li className="leader" key={i}>
+              <span className="leader-rank">{i + 1}</span>
+              <span className="leader-name">{e.name}</span>
+              <span className="leader-score">{e.score}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {board && board !== 'loading' && board.me && (
+        <p className="record">
+          Твоё место: {board.me.rank} · {board.me.score}
+        </p>
+      )}
+      <button className="btn primary" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
+  );
+}
+
+const INVITE_TEXT = 'Полетели со мной в «Небесный патруль» — сбивать пришельцев!';
+
+function FriendsScreen({
+  referrals,
+  asked,
+  onClaim,
+  onClose,
+}: {
+  referrals: Referrals | null;
+  asked: boolean;
+  onClaim: () => void;
+  onClose: () => void;
+}) {
+  const link = referrals?.link;
+  const unclaimed = referrals?.unclaimed ?? 0;
+  return (
+    <Screen>
+      <h2 className="title small">Друзья</h2>
+      <p className="subtitle">
+        Позови друга по своей ссылке. Когда друг сыграет первую партию, ты получишь <CoinIcon />
+        {REFERRAL.reward}.
+      </p>
+      {referrals && <p className="best">Пришло по твоей ссылке: {referrals.invited}</p>}
+      {unclaimed > 0 && (
+        <button className="btn primary" onClick={onClaim}>
+          Забрать <CoinIcon />
+          {unclaimed * REFERRAL.reward}
+        </button>
+      )}
+      {link ? (
+        <button
+          className={`btn ${unclaimed > 0 ? 'ghost' : 'primary'}`}
+          onClick={() => {
+            haptic.impact('light');
+            shareLink(link, INVITE_TEXT);
+          }}
+        >
+          Пригласить друга
+        </button>
+      ) : (
+        <p className="subtitle">
+          {referrals ? 'Приглашения пока недоступны.' : asked ? 'Сервер сейчас недоступен. Попробуй позже.' : 'Загрузка…'}
+        </p>
+      )}
+      <button className="btn ghost" onClick={onClose}>
+        Готово
+      </button>
+    </Screen>
   );
 }
 

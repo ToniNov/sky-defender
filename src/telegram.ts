@@ -15,6 +15,8 @@ interface TelegramWebApp {
   disableVerticalSwipes?(): void;
   setHeaderColor?(color: string): void;
   setBackgroundColor?(color: string): void;
+  shareMessage?(msgId: string, cb?: (sent: boolean) => void): void;
+  openTelegramLink?(url: string): void;
   HapticFeedback?: {
     impactOccurred(style: ImpactStyle): void;
     notificationOccurred(type: NotificationType): void;
@@ -44,6 +46,8 @@ const supports = (version: string) => !!tg?.isVersionAtLeast?.(version);
 /** true, если приложение реально открыто внутри Telegram. */
 export const inTelegram = !!tg?.initData;
 export const userName = tg?.initDataUnsafe?.user?.first_name;
+/** Подписанные данные запуска — сервер проверяет по ним, кто играет. Вне Telegram пусто. */
+export const initData = tg?.initData ?? '';
 
 const BG = '#0b1026';
 
@@ -74,6 +78,27 @@ export const haptic = {
 };
 
 export const backButton = supports('6.1') ? tg?.BackButton : undefined;
+
+/** Открыть ссылку t.me внутри Telegram (с 6.1), вне Telegram — в новой вкладке. */
+export function openTelegramLink(url: string) {
+  if (supports('6.1') && tg?.openTelegramLink) tg.openTelegramLink(url);
+  else window.open(url, '_blank');
+}
+
+/** Окно выбора чата, чтобы отправить ссылку с текстом. */
+export function shareLink(url: string, text: string) {
+  openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+}
+
+/** Окно «Поделиться» есть с Bot API 8.0. */
+export const canShareMessage = supports('8.0') && !!tg?.shareMessage;
+
+/** Открыть выбор чата для сообщения, которое подготовил сервер. true — сообщение отправлено. */
+export function shareMessage(msgId: string): Promise<boolean> {
+  const share = tg?.shareMessage;
+  if (!canShareMessage || !share) return Promise.resolve(false);
+  return new Promise((resolve) => share.call(tg, msgId, (sent) => resolve(sent)));
+}
 
 // ───── Хранилище: localStorage + облако Telegram (синхронизируется между устройствами) ─────
 

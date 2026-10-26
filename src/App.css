@@ -254,6 +254,46 @@
   font-weight: 700;
 }
 
+.leaders {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.leader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.leader-rank {
+  min-width: 28px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: right;
+}
+
+.leader:nth-child(-n + 3) .leader-rank {
+  color: var(--gold);
+}
+
+.leader-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leader-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .quest-toast {
   position: absolute;
   left: 50%;
@@ -670,6 +710,11 @@
 .btn.ghost {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
+}
+
+.btn.ghost:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .hints {

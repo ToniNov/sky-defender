@@ -8,6 +8,7 @@
 - React 19 + TypeScript, сборка Vite
 - PixiJS v8 + @pixi/react v8 (рендер сцены)
 - Telegram WebApp SDK (подключён скриптом в `index.html`)
+- Бэкенд: Cloudflare Workers + D1 (`worker/`), отдельно от игры
 - Деплой: GitHub Actions → GitHub Pages при push в `main` (`.github/workflows/deploy.yml`)
 
 ## Команды
@@ -17,7 +18,12 @@ npm run dev          # дев-сервер, http://localhost:5173 (доступ�
 npm run build        # tsc -b + vite build → dist/  (проверка типов входит сюда)
 npm run lint         # oxlint
 npm run build:single # всё в один dist-single/index.html (для превью вне Telegram)
-npm test             # e2e-тесты Playwright (сам поднимает dev-сервер, мобильный Chromium)
+npm test             # все тесты: сначала логика (Vitest), потом e2e (Playwright)
+npm run test:unit    # тесты логики Vitest: src/**/*.test.ts, без браузера, ~0.1 с
+npm run test:e2e     # e2e-тесты Playwright (сам поднимает dev-сервер, мобильный Chromium)
+npm run api:dev      # API локально, http://localhost:8787 (нужен worker/.dev.vars с BOT_TOKEN)
+npm run api:migrate:local  # миграции D1 локально; api:migrate — в боевую базу
+npm run api:deploy   # выложить API (вручную, только по явной просьбе)
 ```
 
 После любых изменений кода запускай `npm run build` — задача не сделана, пока сборка не проходит без ошибок.
@@ -26,30 +32,57 @@ npm test             # e2e-тесты Playwright (сам поднимает dev-
 
 ```
 src/
-  App.tsx          экраны (меню, пауза, game over), HUD, связь с Telegram — React
+  App.tsx          экраны (меню, пауза, game over, ангар, задания, награда дня), HUD, связь с Telegram — React
   App.css          стили интерфейса
   index.css        цветовые токены, safe-area отступы, фон
   audio.ts         звуки и музыка (синтез через Web Audio, файлов нет); звук включается из жеста — `unlockAudio()`
-  telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, рекорд в CloudStorage
+  telegram.ts      обёртка над Telegram WebApp API: haptic, BackButton, чтение/запись localStorage + CloudStorage
+  api.ts           запросы к серверу (worker/): таблица лидеров, отправка рекорда, «Поделиться», приглашения друзей; адрес — VITE_API_URL, без него выключено
+  progress.ts      сохранение прогресса (рекорд, монеты, улучшения, скины, задания): JSON с версией и миграциями
+  quests.ts        задания: статистика партии, зачисление прогресса, выдача следующего — чистые функции
+  daily.ts         ежедневная награда: серия дней — чистые функции
+  *.test.ts        тесты логики Vitest рядом с модулем
   game/
     Game.tsx       мост React ↔ Pixi: создаёт World, передаёт тики (useTick) и ввод
-    World.ts       ВСЯ игровая логика: игрок, враги, пули, бонусы, частицы, столкновения
+    World.ts       дирижёр мира: порядок кадра, события для React, правила на стыке модулей (сбит враг, урон, бонус, бомба)
+    world/         модули мира (обычные TS-классы без React):
+      rules.ts       правила боя без Pixi — чистые функции (очки, комбо, урон, выпадение, доворот ракет) + rules.test.ts
+      Player.ts      самолёт: движение, щит, магнит, неуязвимость, перезарядка
+      Enemies.ts     враги: появление, движение, стрельба, атаки босса
+      Projectiles.ts пули игрока и врагов, ракеты босса
+      Pickups.ts     бонусы и монеты, притяжение магнитом
+      Waves.ts       волны и построения, баннер «ВОЛНА N», предупреждение о боссе
+      Effects.ts     искры, всплывающие очки, вспышка, тряска — только оформление
+      collisions.ts  что с чем столкнулось; последствия решает World через интерфейс Battle
+      Field.ts       общее состояние поля: размеры, время партии, жив ли игрок
+      pool.ts        SpritePool, removeAt, releaseAt
     balance.ts     числа баланса: скорости, HP, очки, интервалы, шансы, темп волн
     waves.ts       состав волн: какие построения бывают, с какой волны, как часто; план волны
     textures.ts    векторная графика (Graphics), запекается в текстуры при старте
+    skins.ts       скины самолёта как SVG-строки: одна строка и для Pixi, и для <img> в интерфейсе
     debug.ts       типы отладочного API `window.__world` для e2e-тестов (только dev)
 e2e/               тесты Playwright: helpers.ts + spec-файлы по темам
+worker/            API на Cloudflare Workers (свой tsconfig.worker.json, типы Workers); настройка — worker/README.md
+  src/index.ts       маршруты: /api/health, /api/leaderboard, /api/score; CORS
+  src/initData.ts    проверка подписи Telegram initData — чистые функции + тест
+  src/players.ts     имя для таблицы, проверка присланных очков + тест
+  src/share.ts       сообщение «Поделиться результатом» для Bot API savePreparedInlineMessage + тест
+  src/referrals.ts   ссылка-приглашение и разбор start_param (ref_<id>) + тест
+  migrations/        SQL-миграции D1 (новая схема — новый файл 000N_*.sql)
+  wrangler.toml      конфиг воркера: база D1, ALLOWED_ORIGINS
 ROADMAP.md         план развития по версиям — задачи брать отсюда
+docs/art-brief.md  бриф на графику кораблей: требования и промпты для генерации моделей
 ```
 
 ## Архитектура — важно соблюдать
 
-- **Игровая логика живёт в `World.ts` как обычный TS-класс, не в React.** Объекты обновляются напрямую каждый кадр. Не переносить сущности игры (пули, врагов, частицы) в React state/компоненты — будет тормозить.
-- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, combo, hit, kill, powerUp, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
+- **Игровая логика живёт в `World.ts` и модулях `world/` — обычных TS-классах, не в React.** Объекты обновляются напрямую каждый кадр. Не переносить сущности игры (пули, врагов, частицы) в React state/компоненты — будет тормозить.
+- **React получает от мира только редкие события** через интерфейс `WorldEvents` (score, lives, weapon, combo, hit, kill, powerUp, coins, wave, bossDown, gameOver). Новое событие для UI → добавить в `WorldEvents`, прокинуть в `Game.tsx` и обработать в `App.tsx`.
 - **Фазы игры** (`menu | playing | paused | over`) хранятся в `App.tsx`. `World.update(dt, mode)` получает `run | idle | frozen`.
 - **Графика:** новый спрайт — добавить имя в `TextureName` и функцию рисования в `makeTextures`. Картинки-файлы, когда появятся, класть в `src/assets/` и грузить через `Assets.load`.
 - **Pixi-классы в JSX** нужно регистрировать через `extend({ ... })`, теги с префиксом `pixi` (`<pixiContainer>`).
-- **Удаление объектов** — через `removeAt()` в `World.ts` (swap-and-pop + `destroy()`), чтобы не было утечек.
+- **Удаление объектов** — через `removeAt()` из `world/pool.ts` (swap-and-pop + `destroy()`), чтобы не было утечек.
+- **Где что менять:** поведение одного вида объектов — в его модуле (`Enemies`, `Pickups`…); событие, которое задевает несколько модулей (сбит враг → очки, монеты, бонусы), — в `World.ts`; формулы и числовые решения — чистыми функциями в `world/rules.ts` с тестом. Модули знают друг о друге только то, что им передали в конструктор.
 - **Частые объекты (пули игрока и врагов, искры) берутся из `SpritePool`**: `pool.get()` вместо `new Sprite`, удаление — `releaseAt()` вместо `removeAt()`. Спрайт из пула нельзя `destroy()`, и `get()` сбрасывает только alpha/rotation/scale/tint — остальное (например, `blendMode`) задавать при каждом получении.
 - **`dt` в секундах**, скорости — в пикселях в секунду. Все движения умножать на `dt`.
 
@@ -59,8 +92,17 @@ ROADMAP.md         план развития по версиям — задач�
 - Учитывать безопасные зоны: CSS-переменные `--safe-top` / `--safe-bottom` из `index.css`.
 - Вертикальные свайпы отключены (`disableVerticalSwipes`), иначе мини-апп сворачивается во время игры.
 
+## Бэкенд
+
+- Игрок на сервере — только из проверенной `initData` (заголовок `Authorization: tma <initData>`), никогда из тела запроса.
+- Токен бота — секрет (`wrangler secret put BOT_TOKEN`, локально `worker/.dev.vars`), в репозиторий не попадает.
+- Код воркера не импортирует ничего из `src/` и наоборот.
+- Клиент ходит на сервер только через `src/api.ts`. Сервер может не ответить — любая ошибка даёт `null`, игра работает дальше.
+- Адрес API: при сборке `VITE_API_URL` (в GitHub Actions — переменная репозитория `API_URL`). e2e-тесты идут на своём порту 5174 с `VITE_API_URL=http://api.test` и подменяют ответы через `page.route`.
+
 ## Тесты
 
+- **Логика без Pixi и React** (правила боя, задания, награда дня, сохранения и миграции) — тесты Vitest рядом с модулем: `src/quests.ts` → `src/quests.test.ts` (так же и в `worker/src/`). Новую чистую функцию — сразу с тестом. Модули с состоянием (`progress.ts`) грузить заново через `vi.resetModules()`, `localStorage` подменять `vi.stubGlobal`.
 - e2e-тесты управляют миром через `window.__world` (`World.debugApi()`): выключить случайный спавн, поставить врага или бонус в точку, прочитать снимок состояния. Хелперы — в `e2e/helpers.ts`.
 - Новая механика или враг → тест в `e2e/`. Если тесту не хватает данных или действия — расширить `WorldDebug` в `debug.ts` и `debugApi()`.
 - Тесты не должны зависеть от случайности: `startGame(page)` по умолчанию выключает спавн и ждёт конца стартовой неуязвимости.
@@ -70,7 +112,7 @@ ROADMAP.md         план развития по версиям — задач�
 - TypeScript strict, без `any`.
 - Импорты типов через `import type` / `type` (включён `verbatimModuleSyntax`).
 - Небольшие правки предпочтительнее больших переписываний; не трогать то, что не относится к задаче.
-- Баланс (скорости, HP, очки, шансы) держать в `src/game/balance.ts`, а не магическими числами внутри логики. Оформление (цвета, искры, тряска) — константами вверху `World.ts`.
+- Баланс (скорости, HP, очки, шансы) держать в `src/game/balance.ts`, а не магическими числами внутри логики. Оформление (цвета, искры, тряска) — константами вверху того модуля, который его рисует.
 
 ## Рабочий процесс
 
