@@ -10,5 +10,5 @@ APP_URL = "" # ссылка на мини-апп из BotFather, наприме�
 [[d1_databases]]
 binding = "DB"
 database_name = "sky-defender"
-database_id = "00000000-0000-0000-0000-000000000000" # заменить на id из `wrangler d1 create sky-defender`
+database_id = "ee46e79d-7baf-490f-8368-f4302eb06dfa"
 migrations_dir = "migrations"
