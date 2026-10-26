@@ -4,13 +4,14 @@
  *
  *   GET  /api/health       — жив ли сервер
  *   GET  /api/leaderboard  — топ игроков; с заголовком Authorization ещё и своё место
- *   POST /api/score        — { score } после партии; сохраняется лучший результат
- *   POST /api/share        — { score } → { id } подготовленного сообщения для WebApp.shareMessage
+ *   POST /api/run          — партия началась: сервер запоминает время старта
+ *   POST /api/score        — { score } после партии; принимается, если столько можно набрать за время партии
+ *   POST /api/share       — { score } → { id } подготовленного сообщения для WebApp.shareMessage
  *   GET  /api/referrals    — { link, invited, unclaimed }: ссылка-приглашение и сколько друзей пришло
  *   POST /api/referrals/claim — { claimed }: за скольких друзей выдать награду (монеты начисляет игра)
  */
 import { type TelegramUser, verifyInitData } from './initData';
-import { displayName, parseScore } from './players';
+import { displayName, parseScore, plausibleScore } from './players';
 import { inviteLink, parseReferrer } from './referrals';
 import { preparedMessageId, shareResult } from './share';
 
@@ -95,6 +96,18 @@ async function recordReferral(env: Env, invitee: number, startParam: string | un
     .run();
 }
 
+/** Партия началась: запоминаем время старта по своим часам — клиенту в этом верить нельзя. */
+async function startRun(request: Request, env: Env): Promise<Response> {
+  const user = (await authorize(request, env))?.user;
+  if (!user) return fail('unauthorized', 401);
+  await env.DB.prepare(
+    'INSERT INTO runs (player_id, started_at) VALUES (?1, ?2) ON CONFLICT (player_id) DO UPDATE SET started_at = excluded.started_at',
+  )
+    .bind(user.id, Date.now())
+    .run();
+  return json({ ok: true });
+}
+
 async function submitScore(request: Request, env: Env): Promise<Response> {
   const auth = await authorize(request, env);
   if (!auth) return fail('unauthorized', 401);
@@ -103,6 +116,16 @@ async function submitScore(request: Request, env: Env): Promise<Response> {
   if (score === null) return fail('bad-score', 400);
 
   const now = Date.now();
+  // Партия закрывается при любой попытке: нельзя подождать и прислать то же ещё раз
+  const run = await env.DB.prepare('DELETE FROM runs WHERE player_id = ? RETURNING started_at')
+    .bind(user.id)
+    .first<{ started_at: number }>();
+  if (!run) return fail('no-run', 409);
+  if (!plausibleScore(score, now - run.started_at)) {
+    console.warn('implausible score', user.id, score, now - run.started_at);
+    return fail('implausible', 422);
+  }
+
   // Приглашение засчитывается новому игроку: кто уже играл, тот пришёл не по ссылке
   const known = await env.DB.prepare('SELECT 1 FROM players WHERE id = ?').bind(user.id).first();
   if (!known) await recordReferral(env, user.id, auth.startParam, now);
@@ -187,6 +210,7 @@ export default {
     try {
       if (route === 'GET /api/health') response = json({ ok: true });
       else if (route === 'GET /api/leaderboard') response = await leaderboard(request, env);
+      else if (route === 'POST /api/run') response = await startRun(request, env);
       else if (route === 'POST /api/score') response = await submitScore(request, env);
       else if (route === 'POST /api/share') response = await share(request, env);
       else if (route === 'GET /api/referrals') response = await referrals(request, env);

@@ -110,9 +110,26 @@ export async function claimReferrals(): Promise<number | null> {
   return parseClaim(await request('/api/referrals/claim', { method: 'POST' }));
 }
 
-/** Отправить рекорд. Сервер хранит лучший результат, так что слать можно сколько угодно раз. */
-export async function submitScore(score: number): Promise<{ best: number; rank: number } | null> {
-  if (!canSubmit) return null;
+// Начало партии и её результат уходят строго по очереди: иначе при быстром «Ещё раз»
+// старт новой партии может обогнать результат прежней, и сервер его не примет
+let queue: Promise<unknown> = Promise.resolve();
+function inOrder<T>(task: () => Promise<T>): Promise<T> {
+  const next = queue.then(task);
+  queue = next;
+  return next;
+}
+
+/** Партия началась: сервер засекает время, чтобы потом проверить, можно ли набрать столько очков. */
+export function startRun(): Promise<unknown> {
+  if (!canSubmit) return Promise.resolve(null);
+  return inOrder(() => request('/api/run', { method: 'POST' }));
+}
+
+/** Отправить очки партии. Сервер примет их один раз и только если их можно набрать за время с startRun. */
+export function submitScore(score: number): Promise<{ best: number; rank: number } | null> {
+  if (!canSubmit) return Promise.resolve(null);
   const body = JSON.stringify({ score });
-  return parseSubmit(await request('/api/score', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } }));
+  return inOrder(async () =>
+    parseSubmit(await request('/api/score', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } })),
+  );
 }
