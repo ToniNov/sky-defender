@@ -24,7 +24,7 @@ description: Добавить в игру нового врага или нов�
    - Константы оформления (мигание, оттенок) — вверху `Enemies.ts`.
 5. **Правила** — если у врага есть формула или решение (особый урон, неуязвимость с какой-то стороны, распад), это чистая функция в `src/game/world/rules.ts` + тест в `rules.test.ts`. Пример — `shieldBlocks`. Столкновения задевает `collisions.ts`, последствия решает `World.ts` через `Battle`.
 6. **Волны** — `src/game/waves.ts`: имя построения в `FormationName` (с комментарием), `{ minWave, weight }` в `FORMATIONS`. Где встают враги — `case` в `spawnFormation` в `src/game/world/Waves.ts`.
-7. **Задание (по желанию)** — «Сбей N <врагов>»: `QUESTS.kinds` в `balance.ts`, счётчик в `src/quests.ts` (`r.kills.<kind>`), подпись в `QUEST_TITLE` (сейчас в `App.tsx`). Счёт убийств по виду ведётся сам через событие `kill`. Проверь, что тесты `quests.test.ts` и `progress.test.ts` не сломались от нового вида.
+7. **Задание (по желанию)** — «Сбей N <врагов>»: `QUESTS.kinds` в `balance.ts`, счётчик в `src/quests.ts` (`r.kills.<kind>`), подпись в `QUEST_TITLE` (`src/ui/questTitle.ts`). Счёт убийств по виду ведётся сам через событие `kill`. Проверь, что тесты `quests.test.ts` и `progress.test.ts` не сломались от нового вида.
 8. **e2e** — тест в `e2e/enemies.spec.ts`: `spawnEnemy(page, '<kind>', x, y)` и проверка поведения через `snapshot(page)`. Если в снимке не хватает данных (фаза, скорость) — добавь поле в `DebugEnemy` (`src/game/debug.ts`) и в `snapshot()` в `World.debugApi()`. Построение — строка в таблице `e2e/waves.spec.ts`.
 
 ## Бонус
@@ -35,7 +35,7 @@ description: Добавить в игру нового врага или нов�
 4. **Эффект** — ветка в подборе бонуса в `World.ts` (`if (kind === 'gun') … else if …`). ⚠️ Последний `else` там — бомба: без своей ветки новый бонус взорвёт экран.
    - Состояние на игроке (таймер, флаг) — в `src/game/world/Player.ts`: поле, `set<Kind>()`, отсчёт в `update(dt)`, сброс в `hide()` (как `setMagnet(0)`), а время действия с учётом ангара — в `reset()`.
    - Формула (сила, ограничение) — чистой функцией в `rules.ts` с тестом, как `upgradeWeapon` / `addLife`.
-5. **Улучшение в ангаре (по желанию)** — `UPGRADES` в `balance.ts`, применение в `startStats` (`rules.ts`) + тест, подпись в ангаре (сейчас в `App.tsx`). Новое поле в сохранении → проверь миграции `progress.ts` и `progress.test.ts`.
+5. **Улучшение в ангаре (по желанию)** — `UPGRADES` в `balance.ts`, применение в `startStats` (`rules.ts`) + тест, подпись в `UPGRADE_INFO` (`src/screens/HangarScreen.tsx`). Новое поле в сохранении → проверь миграции `progress.ts` и `progress.test.ts`.
 6. **e2e** — тест в `e2e/powerups.spec.ts`: `spawnPowerUp(page, '<kind>', player.x, player.y - 60)`, дождаться подбора, проверить эффект в `snapshot`. Нет нужного поля — добавь в `DebugSnapshot` и `debugApi()`, как `magnet`/`shield`.
 
 ## В конце
