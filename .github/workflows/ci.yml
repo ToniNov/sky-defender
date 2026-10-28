@@ -1,4 +1,5 @@
-# Проверки до слияния в main: линтер, тесты логики, типы и сборка на каждом push в dev и в Pull Request
+# Проверки до слияния в main на каждом push в dev и в Pull Request:
+# check — линтер, тесты логики, типы и сборка; e2e — тесты Playwright в мобильном Chromium (идут параллельно)
 name: CI
 
 on:
@@ -22,3 +23,23 @@ jobs:
       - run: npm run lint
       - run: npm run test:unit # тесты логики (Vitest), без браузера
       - run: npm run build # включает проверку типов (tsc -b)
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium # только Chromium: тесты идут в мобильном профиле Pixel 7
+      - run: npm run test:e2e # сам поднимает dev-сервер на порту 5174
+      # Скриншоты и трейсы упавших тестов: скачать со страницы запуска, трейс открыть через `npx playwright show-trace`
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: test-results
+          retention-days: 7
