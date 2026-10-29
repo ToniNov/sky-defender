@@ -56,11 +56,21 @@ test('веер стреляет широким конусом, пушка — п
 });
 
 test('урон снимает уровень оружия, но не вид', async ({ page }) => {
-  await pickUp(page, 'weapon');
-  const { player } = await snapshot(page);
-  await spawnEnemy(page, 'scout', player.x, player.y);
-  await expect.poll(async () => (await snapshot(page)).lives).toBe(2);
-  expect((await snapshot(page)).weapon).toEqual({ kind: 'gun', level: 1 });
+  // не пушка: она и так стартовая — сброс на неё тест бы не заметил
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 2 });
+  const ram = async (lives: number) => {
+    await expect.poll(async () => (await snapshot(page)).invuln).toBe(0);
+    const { player } = await snapshot(page);
+    await spawnEnemy(page, 'scout', player.x, player.y);
+    await expect.poll(async () => (await snapshot(page)).lives).toBe(lives);
+  };
+  await ram(2);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
+  // на первом уровне ниже некуда — вид и уровень остаются
+  await ram(1);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
 });
 
 test('щит принимает таран вместо жизни', async ({ page }) => {
