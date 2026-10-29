@@ -65,3 +65,20 @@ test.describe('ракеты', () => {
     await expect.poll(async () => (await snapshot(page)).enemies, { timeout: 4000 }).toEqual([]);
   });
 });
+
+test.describe('иглы', () => {
+  test.beforeEach(({ page }) => arm(page, 'pierce'));
+
+  test('пробивают насквозь: разведчик за сплиттером сбит раньше сплиттера', async ({ page }) => {
+    // огонь — только когда враги уже стоят: иначе первая пуля долетела бы до разведчика раньше, чем встал сплиттер
+    await setCheats(page, { holdFire: true });
+    const { player } = await snapshot(page);
+    await spawnEnemy(page, 'splitter', player.x, 300);
+    await spawnEnemy(page, 'scout', player.x, 120);
+    await setCheats(page, { holdFire: false });
+    // обычная пуля застряла бы в сплиттере (3 HP); игла после него долетает до разведчика (1 HP)
+    await expect
+      .poll(async () => (await snapshot(page)).enemies.map((e) => e.kind), { intervals: [50] })
+      .toEqual(['splitter']);
+  });
+});

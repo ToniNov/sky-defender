@@ -17,6 +17,7 @@ export const WEAPON_LOOK: Record<WeaponKind, { color: number; letter: string; la
   gun: { color: 0xffd23f, letter: 'П', label: 'ПУШКА' },
   spread: { color: 0x6ff2c0, letter: 'В', label: 'ВЕЕР' },
   laser: { color: 0xff5c8a, letter: 'Л', label: 'ЛАЗЕР' },
+  pierce: { color: 0x8ab4ff, letter: 'И', label: 'ИГЛЫ' },
   rocket: { color: 0xff9a3c, letter: 'Р', label: 'РАКЕТЫ' },
 };
 const CAPSULE_LETTER_COLOR = 0x1a1030;
@@ -32,6 +33,7 @@ export type TextureName =
   | 'bullet'
   | 'beam'
   | 'rocket'
+  | 'needle'
   | 'enemyBullet'
   | 'missile'
   | 'scout'
@@ -101,6 +103,14 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     bullet: bake((g) => {
       g.roundRect(0, 0, 6, 18, 3).fill(0xffd23f);
       g.roundRect(1.5, 2, 3, 13, 1.5).fill(0xffffff);
+    }),
+
+    // Игла — пробивающая пуля: длинная и тонкая
+    needle: bake((g) => {
+      const { color } = WEAPON_LOOK.pierce;
+      g.roundRect(0, 0, 5, 24, 2.5).fill({ color, alpha: 0.5 });
+      g.poly([2.5, 0, 4, 6, 4, 22, 1, 22, 1, 6]).fill(color);
+      g.rect(2, 3, 1, 17).fill(0xffffff);
     }),
 
     // Ракета игрока (носом вверх) с огоньком сзади

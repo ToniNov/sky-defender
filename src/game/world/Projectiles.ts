@@ -25,6 +25,10 @@ export interface PlayerBullet extends Bullet {
   damage: number;
   /** Ракета: доворот на ближайшего врага, рад/с. 0 — обычная пуля, летит прямо. Щит щитоносца ракету не держит. */
   homing: number;
+  /** Сколько ещё врагов пуля пробьёт насквозь; 0 — пропадает при попадании. */
+  pierce: number;
+  /** Кого пуля уже задела — второй раз того же врага не бьёт. */
+  hit: object[];
 }
 export interface Missile {
   s: Sprite;
@@ -82,22 +86,34 @@ export class Projectiles {
       const side = (this.rocketSide = -this.rocketSide);
       for (const [dx, angle] of volleys[weapon.level - 1]) {
         const a = angle * side;
-        this.addBullet(this.tx.rocket, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, damage, turnRate);
+        this.addBullet(this.tx.rocket, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, {
+          damage,
+          homing: turnRate,
+        });
       }
       return;
     }
     const { patterns, bulletSpeed, damage } = spec;
+    const pierce = 'pierce' in spec ? spec.pierce : 0;
+    const texture = pierce ? this.tx.needle : this.tx.bullet;
     for (const [dx, vx] of patterns[weapon.level - 1]) {
-      this.addBullet(this.tx.bullet, x + dx, y - 30, vx, -bulletSpeed, damage, 0);
+      this.addBullet(texture, x + dx, y - 30, vx, -bulletSpeed, { damage, pierce });
     }
   }
 
-  private addBullet(texture: Texture, x: number, y: number, vx: number, vy: number, damage: number, homing: number) {
+  private addBullet(
+    texture: Texture,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    { damage, homing = 0, pierce = 0 }: { damage: number; homing?: number; pierce?: number },
+  ) {
     const s = this.bulletPool.get();
-    s.texture = texture; // в пуле и пули, и ракеты
+    s.texture = texture; // в пуле и пули, и иглы, и ракеты
     s.position.set(x, y);
     s.rotation = Math.atan2(vx, -vy);
-    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing });
+    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing, pierce, hit: [] });
   }
 
   /** Вражеский выстрел в игрока (со смещением угла); если игрока нет — вниз. */

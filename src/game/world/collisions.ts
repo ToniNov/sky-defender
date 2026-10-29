@@ -38,12 +38,17 @@ export function collide(b: Battle) {
   for (let i = shots.bullets.length - 1; i >= 0; i--) {
     const bullet = shots.bullets[i];
     for (const e of enemies.list) {
-      if (!near(bullet.s, e.s, bullet.r + e.r)) continue;
+      if (!near(bullet.s, e.s, bullet.r + e.r) || bullet.hit.includes(e)) continue;
       const { x, y } = bullet.s;
       const { damage, homing } = bullet;
-      shots.removeBullet(i);
-      // ракета заходит сбоку — щит её не держит
-      if (e.kind === 'shielder' && !homing && shieldBlocks({ x, y }, e.s)) b.deflect(x, y);
+      // ракета заходит сбоку — щит её не держит; пробивающую пулю щит останавливает
+      const blocked = e.kind === 'shielder' && !homing && shieldBlocks({ x, y }, e.s);
+      // игла летит дальше; следующего врага заденет со следующего кадра — список врагов сейчас поменяется
+      if (bullet.pierce > 0 && !blocked) {
+        bullet.pierce--;
+        bullet.hit.push(e);
+      } else shots.removeBullet(i);
+      if (blocked) b.deflect(x, y);
       else b.damageEnemy(e, x, y, damage);
       break;
     }
