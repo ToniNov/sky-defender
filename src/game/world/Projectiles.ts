@@ -1,7 +1,8 @@
 import { Sprite, type Container, type Texture } from 'pixi.js';
 import { sfx } from '../../audio';
 import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS, type WeaponKind } from '../balance';
-import { WEAPON_LOOK, type TextureName, type Textures } from '../textures';
+import type { TextureName, Textures } from '../textures';
+import { WEAPON_LOOK } from '../weaponLook';
 import type { Effects } from './Effects';
 import type { Field } from './Field';
 import type { Player } from './Player';

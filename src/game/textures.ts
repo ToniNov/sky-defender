@@ -2,6 +2,7 @@ import { Container, Graphics, Text, type Renderer, type Texture } from 'pixi.js'
 import { SKIN_NAMES, WEAPON_KINDS, type SkinName, type WeaponKind } from './balance';
 import type { ShipTextures } from './ships';
 import { skinSvg } from './skins';
+import { WEAPON_LOOK } from './weaponLook';
 
 /**
  * Вся графика игры рисуется векторно через Graphics и один раз
@@ -12,14 +13,6 @@ import { skinSvg } from './skins';
 export type PlaneTextureName = `plane_${SkinName}`;
 export const planeTexture = (skin: SkinName): PlaneTextureName => `plane_${skin}`;
 
-/** Как выглядит вид оружия: цвет и буква капсулы, название при смене. */
-export const WEAPON_LOOK: Record<WeaponKind, { color: number; letter: string; label: string }> = {
-  gun: { color: 0xffd23f, letter: 'П', label: 'ПУШКА' },
-  spread: { color: 0x6ff2c0, letter: 'В', label: 'ВЕЕР' },
-  laser: { color: 0xff5c8a, letter: 'Л', label: 'ЛАЗЕР' },
-  pierce: { color: 0x8ab4ff, letter: 'И', label: 'ИГЛЫ' },
-  rocket: { color: 0xff9a3c, letter: 'Р', label: 'РАКЕТЫ' },
-};
 const CAPSULE_LETTER_COLOR = 0x1a1030;
 
 /** Капсула оружия каждого вида: capsule_gun, capsule_spread… */

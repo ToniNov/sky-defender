@@ -62,8 +62,25 @@
 
 .hud-weapon {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-top: 8px;
+}
+
+/* капсула вида оружия: цвет и буква, как у капсулы в игре; --weapon задаёт Hud */
+.hud-weapon-badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 18px;
+  margin-right: 3px;
+  border-radius: 9px;
+  background: var(--weapon);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--weapon) 60%, transparent);
+  color: #1a1030;
+  font-size: 12px;
+  font-weight: 900;
+  animation: combo-pop 0.35s ease-out;
 }
 
 .hud-weapon i {
@@ -74,8 +91,8 @@
 }
 
 .hud-weapon i.on {
-  background: var(--gold);
-  box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
+  background: var(--weapon);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--weapon) 70%, transparent);
 }
 
 .hud-coins {

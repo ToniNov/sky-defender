@@ -16,7 +16,8 @@ import {
   type WeaponKind,
 } from './balance';
 import type { WorldDebug } from './debug';
-import { WEAPON_LOOK, type Textures } from './textures';
+import type { Textures } from './textures';
+import { WEAPON_LOOK } from './weaponLook';
 import { FORMATIONS, type FormationName } from './waves';
 import { collide, type Battle, type HitCause } from './world/collisions';
 import { Effects } from './world/Effects';
