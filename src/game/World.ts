@@ -269,6 +269,7 @@ export class World {
       this.deathTimer -= dt;
       if (this.deathTimer <= 0) this.ev.gameOver(this.score, this.death);
     }
+    this.shots.updateBeam(this.field.alive && !this.cheats.holdFire);
 
     this.shots.updateBullets(dt);
     this.enemies.update(dt);
@@ -497,6 +498,7 @@ export class World {
         enemyBullets: this.shots.enemyBullets.length,
         playerBullets: this.shots.bullets.length,
         playerBulletPositions: this.shots.bullets.map((b) => pos(b.s)),
+        beam: this.shots.beam && { ...this.shots.beam },
       }),
       setAutoSpawn: (on) => {
         this.autoSpawn = on;

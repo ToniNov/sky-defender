@@ -6,10 +6,14 @@ import type { Effects } from './Effects';
 import type { Field } from './Field';
 import type { Player } from './Player';
 import { releaseAll, releaseAt, removeAt, SpritePool } from './pool';
-import { turnToward } from './rules';
+import { turnToward, type Beam } from './rules';
 
 const MISSILE_COLOR = 0x7fffd4;
 const BOMB_BULLET_COLOR = 0xff3d6e; // искры от вражеских пуль, стёртых бомбой
+const BEAM_FLICKER = 0.15; // луч дрожит по ширине на столько
+const BEAM_GLOW = 2; // свечение шире луча, которым бьёт лазер, во столько раз
+const BEAM_FROM_NOSE = 28; // луч начинается от носа самолёта
+const BEAM_OFF_SCREEN = -40; // без препятствий луч уходит за верх экрана
 
 export interface Bullet {
   s: Sprite;
@@ -27,9 +31,13 @@ export interface Missile {
   homing: number; // сколько ещё доворачивает на игрока
 }
 
-/** Снаряды: пули игрока, пули врагов и самонаводящиеся ракеты босса. */
+/** Снаряды: пули и луч игрока, пули врагов и самонаводящиеся ракеты босса. */
 export class Projectiles {
   readonly bullets: PlayerBullet[] = [];
+  /** Луч лазера, пока он включён; top обновляют столкновения (луч упирается в щит). */
+  beam: Beam | null = null;
+  /** Урон луча, накопленный с прошлой проверки столкновений. */
+  beamDamage = 0;
   readonly enemyBullets: Bullet[] = [];
   readonly missiles: Missile[] = [];
 
@@ -40,6 +48,7 @@ export class Projectiles {
   private field: Field;
   private player: Player;
   private fx: Effects;
+  private beamSprite: Sprite;
 
   constructor(textures: Textures, bulletLayer: Container, fxLayer: Container, field: Field, player: Player, fx: Effects) {
     this.tx = textures;
@@ -49,12 +58,21 @@ export class Projectiles {
     this.fx = fx;
     this.bulletPool = new SpritePool(textures.bullet, bulletLayer);
     this.enemyBulletPool = new SpritePool(textures.enemyBullet, fxLayer);
+    this.beamSprite = new Sprite(textures.beam);
+    this.beamSprite.anchor.set(0.5, 1);
+    this.beamSprite.visible = false;
+    bulletLayer.addChild(this.beamSprite);
   }
 
-  /** Залп игрока: узор, скорость и урон пуль — от вида и уровня оружия. */
+  /** Залп игрока: узор, скорость и урон пуль — от вида и уровня оружия. У лазера — тик урона луча. */
   firePlayer() {
     const { x, y, weapon } = this.player;
-    const { patterns, bulletSpeed, damage } = WEAPONS[weapon.kind];
+    const spec = WEAPONS[weapon.kind];
+    if ('beam' in spec) {
+      this.beamDamage += spec.beam[weapon.level - 1].dps * spec.interval;
+      return;
+    }
+    const { patterns, bulletSpeed, damage } = spec;
     sfx.shoot();
     for (const [dx, vx] of patterns[weapon.level - 1]) {
       const s = this.bulletPool.get();
@@ -86,6 +104,32 @@ export class Projectiles {
     s.position.set(x, y);
     this.missileLayer.addChild(s);
     this.missiles.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, homing: homingTime });
+  }
+
+  /** Луч лазера: включён, пока в руках лазер и on (самолёт жив и стреляет). Идёт за самолётом. */
+  updateBeam(on: boolean) {
+    const { x, y, weapon } = this.player;
+    const spec = WEAPONS[weapon.kind];
+    if (!on || !('beam' in spec)) {
+      this.hideBeam();
+      return;
+    }
+    const half = spec.beam[weapon.level - 1].width / 2;
+    const bottom = y - BEAM_FROM_NOSE;
+    const top = this.beam?.top ?? BEAM_OFF_SCREEN;
+    this.beam = { x, half, bottom, top: BEAM_OFF_SCREEN };
+    // рисуем до прошлого препятствия: столкновения этого кадра обновят top для следующего
+    const s = this.beamSprite;
+    s.visible = true;
+    s.position.set(x, bottom);
+    s.width = half * 2 * BEAM_GLOW * (1 + (Math.random() - 0.5) * BEAM_FLICKER);
+    s.height = Math.max(0, bottom - top);
+  }
+
+  private hideBeam() {
+    this.beam = null;
+    this.beamDamage = 0;
+    this.beamSprite.visible = false;
   }
 
   removeBullet(i: number) {
@@ -150,6 +194,7 @@ export class Projectiles {
   }
 
   clear() {
+    this.hideBeam();
     releaseAll(this.bullets, this.bulletPool);
     releaseAll(this.enemyBullets, this.enemyBulletPool);
     while (this.missiles.length) removeAt(this.missiles, this.missiles.length - 1);

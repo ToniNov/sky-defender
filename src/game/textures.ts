@@ -16,6 +16,7 @@ export const planeTexture = (skin: SkinName): PlaneTextureName => `plane_${skin}
 export const WEAPON_LOOK: Record<WeaponKind, { color: number; letter: string; label: string }> = {
   gun: { color: 0xffd23f, letter: 'П', label: 'ПУШКА' },
   spread: { color: 0x6ff2c0, letter: 'В', label: 'ВЕЕР' },
+  laser: { color: 0xff5c8a, letter: 'Л', label: 'ЛАЗЕР' },
 };
 const CAPSULE_LETTER_COLOR = 0x1a1030;
 
@@ -28,6 +29,7 @@ export type TextureName =
   | CapsuleTextureName
   | 'flame'
   | 'bullet'
+  | 'beam'
   | 'enemyBullet'
   | 'missile'
   | 'scout'
@@ -97,6 +99,14 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     bullet: bake((g) => {
       g.roundRect(0, 0, 6, 18, 3).fill(0xffd23f);
       g.roundRect(1.5, 2, 3, 13, 1.5).fill(0xffffff);
+    }),
+
+    // Луч лазера в разрезе: свечение, луч, белая сердцевина. Растягивается по высоте
+    beam: bake((g) => {
+      const { color } = WEAPON_LOOK.laser;
+      g.rect(0, 0, 24, 4).fill({ color, alpha: 0.25 });
+      g.rect(6, 0, 12, 4).fill({ color, alpha: 0.8 });
+      g.rect(10, 0, 4, 4).fill(0xffffff);
     }),
 
     enemyBullet: bake((g) => {

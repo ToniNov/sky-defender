@@ -4,7 +4,7 @@ import type { Field } from './Field';
 import type { Pickups } from './Pickups';
 import type { Player } from './Player';
 import type { Projectiles } from './Projectiles';
-import { near, shieldBlocks } from './rules';
+import { beamTop, inBeam, near, shieldBlocks } from './rules';
 
 /** Что попало в игрока: пуля, ракета босса или враг, который протаранил (его вид). */
 export type HitCause = 'bullet' | 'missile' | EnemyKind;
@@ -57,6 +57,8 @@ export function collide(b: Battle) {
     shots.destroyMissile(j);
   }
 
+  beamHits(b);
+
   if (!b.field.alive) return;
   const pos = player.view;
   // после попадания — неуязвимость; одно попадание за кадр
@@ -101,5 +103,29 @@ export function collide(b: Battle) {
   // бонусы
   for (let i = pickups.powerUps.length - 1; i >= 0; i--) {
     if (near(pickups.powerUps[i].s, pos, PLAYER.pickupR)) b.pickPowerUp(i);
+  }
+}
+
+/** Луч лазера → всё на линии до щита щитоносца: урон раз в тик, ракеты босса сгорают сразу. */
+function beamHits(b: Battle) {
+  const { shots, enemies } = b;
+  const beam = shots.beam;
+  if (!beam) return;
+  const shielders = enemies.list.filter((e) => e.kind === 'shielder').map((e) => e.s);
+  beam.top = beamTop(beam.x, beam.bottom, shielders, beam.top);
+
+  for (let i = shots.missiles.length - 1; i >= 0; i--) {
+    if (inBeam(beam, shots.missiles[i].s, ENEMY.mother.homing.r)) shots.destroyMissile(i);
+  }
+
+  const damage = shots.beamDamage;
+  if (damage <= 0) return;
+  shots.beamDamage = 0;
+  // копия списка: сбитый сплиттер добавляет осколки, а их этот тик задеть не должен
+  for (const e of [...enemies.list]) {
+    if (!inBeam(beam, e.s, e.r)) continue;
+    const y = Math.min(beam.bottom, e.s.y + e.r);
+    if (e.kind === 'shielder' && shieldBlocks({ x: beam.x, y: beam.bottom }, e.s)) b.deflect(beam.x, beam.top);
+    else b.damageEnemy(e, beam.x, y, damage);
   }
 }

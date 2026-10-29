@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { COMBO, DIFFICULTY_TIME, ENEMY, NO_UPGRADES, PLAYER, POWER_UP, UPGRADES, WEAPON_KINDS, WEAPONS, type Weapon } from '../balance';
 import {
   addLife,
+  beamTop,
   bossAttackAt,
   bossDrop,
   bossHp,
   comboMultiplier,
   difficulty,
   fireInterval,
+  inBeam,
   killScore,
   loseWeaponLevel,
   near,
@@ -88,13 +90,45 @@ describe('оружие', () => {
     expect(loseWeaponLevel(spread(1))).toEqual(spread(1));
   });
 
-  it('у каждого вида залп на каждый уровень', () => {
-    for (const kind of WEAPON_KINDS) expect(WEAPONS[kind].patterns).toHaveLength(PLAYER.maxWeapon);
+  it('у каждого вида залп или луч на каждый уровень', () => {
+    for (const kind of WEAPON_KINDS) {
+      const spec = WEAPONS[kind];
+      expect('beam' in spec ? spec.beam : spec.patterns).toHaveLength(PLAYER.maxWeapon);
+    }
   });
 
   it('пауза между залпами — от вида и скорострельности', () => {
     expect(fireInterval(gun(1), 1)).toBe(WEAPONS.gun.interval);
     expect(fireInterval(gun(3), 0.8)).toBeCloseTo(WEAPONS.gun.interval * 0.8);
+  });
+});
+
+describe('луч лазера', () => {
+  const { plateHalf, plateY } = ENEMY.shielder;
+
+  it('без щитоносцев уходит до заданного верха', () => {
+    expect(beamTop(100, 600, [], -40)).toBe(-40);
+  });
+
+  it('упирается в щит ближайшего щитоносца над самолётом', () => {
+    const shielders = [
+      { x: 100, y: 100 },
+      { x: 105, y: 300 }, // ближе к самолёту — он и держит луч
+      { x: 100, y: 700 }, // ниже самолёта — не мешает
+    ];
+    expect(beamTop(100, 600, shielders, -40)).toBe(300 + plateY);
+  });
+
+  it('щитоносца сбоку от луча не замечает', () => {
+    expect(beamTop(100, 600, [{ x: 100 + plateHalf, y: 300 }], -40)).toBe(-40);
+  });
+
+  it('задевает круг, если тот касается полосы луча', () => {
+    const beam = { x: 100, half: 5, top: 200, bottom: 600 };
+    expect(inBeam(beam, { x: 120, y: 400 }, 16)).toBe(true);
+    expect(inBeam(beam, { x: 122, y: 400 }, 16)).toBe(false); // сбоку
+    expect(inBeam(beam, { x: 100, y: 180 }, 16)).toBe(false); // за щитом
+    expect(inBeam(beam, { x: 100, y: 620 }, 16)).toBe(false); // позади самолёта
   });
 });
 

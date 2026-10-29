@@ -24,10 +24,20 @@ export const PLAYER = {
 /** Залп: пули [смещение по x, скорость по x]. */
 type Volley = readonly (readonly [number, number])[];
 
-/**
- * Виды оружия. interval — пауза между залпами (до улучшения скорострельности),
- * damage — урон одной пули, patterns[n] — залп на уровне n + 1 (их PLAYER.maxWeapon).
- */
+/** Оружие, которое стреляет пулями: damage — урон одной пули, patterns[n] — залп на уровне n + 1. */
+interface VolleySpec {
+  interval: number; // пауза между залпами (до улучшения скорострельности)
+  damage: number;
+  bulletSpeed: number;
+  patterns: readonly Volley[];
+}
+/** Луч: бьёт всех на линии вверх от самолёта раз в interval; beam[n] — уровень n + 1. */
+interface BeamSpec {
+  interval: number; // тик урона (улучшение скорострельности делает его чаще)
+  beam: readonly { dps: number; width: number }[];
+}
+
+/** Виды оружия, у каждого PLAYER.maxWeapon уровней. */
 export const WEAPONS = {
   gun: {
     interval: 0.15,
@@ -50,7 +60,17 @@ export const WEAPONS = {
       [[0, 0], [-5, -110], [5, 110], [-8, -220], [8, 220], [-12, -330], [12, 330]],
     ],
   },
-} as const satisfies Record<string, { interval: number; damage: number; bulletSpeed: number; patterns: readonly Volley[] }>;
+  // лазер: сплошной луч, пробивает всех на линии; урон в секунду ниже пушки — зато по всем сразу.
+  // Щит щитоносца луч не пробивает: дальше щита он не идёт
+  laser: {
+    interval: 0.1,
+    beam: [
+      { dps: 5, width: 10 },
+      { dps: 8, width: 16 },
+      { dps: 12, width: 24 },
+    ],
+  },
+} as const satisfies Record<string, VolleySpec | BeamSpec>;
 
 export type WeaponKind = keyof typeof WEAPONS;
 export const WEAPON_KINDS = Object.keys(WEAPONS) as WeaponKind[];
@@ -130,6 +150,7 @@ export const ENEMY = {
     speed: [45, 60], // × сложность
     trackSpeed: 55, // сдвигается под игрока, но медленнее его
     plateHalf: 16, // полуширина щита снизу: пули ближе к центру отлетают
+    plateY: 20, // низ щита ниже центра на столько — здесь останавливается лазер
   },
   splitter: {
     hp: 3,

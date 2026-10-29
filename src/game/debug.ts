@@ -50,6 +50,8 @@ export interface DebugSnapshot {
   playerBullets: number;
   /** Где пули игрока: по ним видно узор залпа. */
   playerBulletPositions: { x: number; y: number }[];
+  /** Луч лазера: середина x, полуширина half, от bottom (нос самолёта) вверх до top. null — выключен. */
+  beam: { x: number; half: number; top: number; bottom: number } | null;
 }
 
 export interface WorldDebug {

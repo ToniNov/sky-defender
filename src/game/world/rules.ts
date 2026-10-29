@@ -53,6 +53,27 @@ export function startStats(upgrades: Upgrades) {
 /** Пауза между залпами: своя у каждого вида, короче с улучшением скорострельности. */
 export const fireInterval = (weapon: Weapon, reload: number) => WEAPONS[weapon.kind].interval * reload;
 
+/** Луч лазера: полоса шириной 2 × half от самолёта (bottom) вверх до top. */
+export interface Beam {
+  x: number;
+  half: number;
+  top: number;
+  bottom: number;
+}
+
+/** Где кончается луч: на щите ближайшего щитоносца над самолётом, иначе на top (за верхом экрана). */
+export function beamTop(x: number, bottom: number, shielders: readonly Point[], top: number) {
+  for (const s of shielders) {
+    const plate = s.y + ENEMY.shielder.plateY;
+    if (plate < bottom && plate > top && Math.abs(x - s.x) < ENEMY.shielder.plateHalf) top = plate;
+  }
+  return top;
+}
+
+/** Задевает ли луч круг с центром p и радиусом r. */
+export const inBeam = (b: Beam, p: Point, r: number) =>
+  Math.abs(p.x - b.x) < b.half + r && p.y + r > b.top && p.y - r < b.bottom;
+
 /** Подобрано оружие kind: тот же вид — уровень +1 (не выше максимума), другой — смена вида с тем же уровнем. */
 export const pickWeapon = (weapon: Weapon, kind: WeaponKind): Weapon =>
   kind === weapon.kind ? { kind, level: Math.min(PLAYER.maxWeapon, weapon.level + 1) } : { kind, level: weapon.level };
