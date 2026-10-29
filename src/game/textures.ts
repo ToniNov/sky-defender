@@ -33,6 +33,7 @@ export type TextureName =
   | 'bullet'
   | 'beam'
   | 'rocket'
+  | 'pellet'
   | 'needle'
   | 'enemyBullet'
   | 'missile'
@@ -103,6 +104,14 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     bullet: bake((g) => {
       g.roundRect(0, 0, 6, 18, 3).fill(0xffd23f);
       g.roundRect(1.5, 2, 3, 13, 1.5).fill(0xffffff);
+    }),
+
+    // Дробина веера: маленькая и круглая
+    pellet: bake((g) => {
+      const { color } = WEAPON_LOOK.spread;
+      g.circle(5, 5, 5).fill({ color, alpha: 0.35 });
+      g.circle(5, 5, 3.2).fill(color);
+      g.circle(4.2, 4.2, 1.4).fill(0xffffff);
     }),
 
     // Игла — пробивающая пуля: длинная и тонкая

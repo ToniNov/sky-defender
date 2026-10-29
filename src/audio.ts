@@ -113,8 +113,20 @@ function boom(name: string, dur: number, vol: number, f0 = 1400) {
   if (r) noiseHit(r.ac, r.out, 'lowpass', f0, 80, r.ac.currentTime, dur, vol);
 }
 
+/** Шипение: шум через полосовой фильтр, срез растёт — как уходящая ракета. */
+function whoosh(name: string, dur: number, vol: number) {
+  const r = ready(name);
+  if (r) noiseHit(r.ac, r.out, 'bandpass', 500, 2600, r.ac.currentTime, dur, vol);
+}
+
 export const sfx = {
+  // выстрелы: у каждого вида оружия свой
   shoot: () => tone('shoot', 'square', 820, 300, 0.07, 0.025),
+  shootSpread: () => tone('shootSpread', 'triangle', 620, 240, 0.06, 0.04),
+  shootPierce: () => tone('shootPierce', 'sine', 1700, 900, 0.05, 0.035),
+  shootRocket: () => whoosh('shootRocket', 0.22, 0.09),
+  laser: () => tone('laser', 'sawtooth', 115, 105, 0.11, 0.012), // гул луча, на каждый тик урона
+  rocketHit: () => boom('rocketHit', 0.2, 0.12, 2200),
   hit: () => tone('hit', 'triangle', 260, 140, 0.05, 0.05),
   explosion: (big = false) => boom(big ? 'explosion-big' : 'explosion', big ? 0.8 : 0.28, big ? 0.35 : 0.16),
   powerUp() {

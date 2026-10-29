@@ -1,7 +1,7 @@
 import { Sprite, type Container, type Texture } from 'pixi.js';
 import { sfx } from '../../audio';
-import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS } from '../balance';
-import type { Textures } from '../textures';
+import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS, type WeaponKind } from '../balance';
+import { WEAPON_LOOK, type TextureName, type Textures } from '../textures';
 import type { Effects } from './Effects';
 import type { Field } from './Field';
 import type { Player } from './Player';
@@ -14,6 +14,24 @@ const BEAM_FLICKER = 0.15; // луч дрожит по ширине на сто�
 const BEAM_GLOW = 2; // свечение шире луча, которым бьёт лазер, во столько раз
 const BEAM_FROM_NOSE = 28; // луч начинается от носа самолёта
 const BEAM_OFF_SCREEN = -40; // без препятствий луч уходит за верх экрана
+/** Чем стреляет каждый вид (у лазера — луч). */
+const SHOT_TEXTURE: Record<WeaponKind, TextureName> = {
+  gun: 'bullet',
+  spread: 'pellet',
+  laser: 'beam',
+  pierce: 'needle',
+  rocket: 'rocket',
+};
+/** Звук залпа каждого вида; у лазера — гул на каждый тик урона. */
+const SHOT_SOUND: Record<WeaponKind, () => void> = {
+  gun: sfx.shoot,
+  spread: sfx.shootSpread,
+  laser: sfx.laser,
+  pierce: sfx.shootPierce,
+  rocket: sfx.shootRocket,
+};
+const ROCKET_TRAIL_CHANCE = 0.6; // дымный след: искра за ракетой в кадр с такой вероятностью
+const ROCKET_TRAIL_SPEED = 30;
 
 export interface Bullet {
   s: Sprite;
@@ -29,6 +47,8 @@ export interface PlayerBullet extends Bullet {
   pierce: number;
   /** Кого пуля уже задела — второй раз того же врага не бьёт. */
   hit: object[];
+  /** Из какого оружия: от него искры и звук попадания. */
+  kind: WeaponKind;
 }
 export interface Missile {
   s: Sprite;
@@ -76,17 +96,18 @@ export class Projectiles {
   firePlayer() {
     const { x, y, weapon } = this.player;
     const spec = WEAPONS[weapon.kind];
+    const texture = this.tx[SHOT_TEXTURE[weapon.kind]];
+    SHOT_SOUND[weapon.kind]();
     if ('beam' in spec) {
       this.beamDamage += spec.beam[weapon.level - 1].dps * spec.interval;
       return;
     }
-    sfx.shoot();
     if ('volleys' in spec) {
       const { volleys, speed, damage, turnRate } = spec;
       const side = (this.rocketSide = -this.rocketSide);
       for (const [dx, angle] of volleys[weapon.level - 1]) {
         const a = angle * side;
-        this.addBullet(this.tx.rocket, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, {
+        this.addBullet(texture, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, {
           damage,
           homing: turnRate,
         });
@@ -95,7 +116,6 @@ export class Projectiles {
     }
     const { patterns, bulletSpeed, damage } = spec;
     const pierce = 'pierce' in spec ? spec.pierce : 0;
-    const texture = pierce ? this.tx.needle : this.tx.bullet;
     for (const [dx, vx] of patterns[weapon.level - 1]) {
       this.addBullet(texture, x + dx, y - 30, vx, -bulletSpeed, { damage, pierce });
     }
@@ -110,10 +130,10 @@ export class Projectiles {
     { damage, homing = 0, pierce = 0 }: { damage: number; homing?: number; pierce?: number },
   ) {
     const s = this.bulletPool.get();
-    s.texture = texture; // в пуле и пули, и иглы, и ракеты
+    s.texture = texture; // в пуле снаряды всех видов
     s.position.set(x, y);
     s.rotation = Math.atan2(vx, -vy);
-    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing, pierce, hit: [] });
+    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing, pierce, hit: [], kind: this.player.weapon.kind });
   }
 
   /** Вражеский выстрел в игрока (со смещением угла); если игрока нет — вниз. */
@@ -202,6 +222,9 @@ export class Projectiles {
         b.vx = Math.cos(angle) * speed;
         b.vy = Math.sin(angle) * speed;
         b.s.rotation = angle + Math.PI / 2;
+        if (Math.random() < ROCKET_TRAIL_CHANCE) {
+          this.fx.explode(b.s.x - b.vx * 0.03, b.s.y - b.vy * 0.03, WEAPON_LOOK.rocket.color, 1, ROCKET_TRAIL_SPEED);
+        }
       }
       b.s.x += b.vx * dt;
       b.s.y += b.vy * dt;

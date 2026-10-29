@@ -1,4 +1,4 @@
-import { ENEMY, PLAYER, type EnemyKind } from '../balance';
+import { ENEMY, PLAYER, type EnemyKind, type WeaponKind } from '../balance';
 import type { Enemies, Enemy } from './Enemies';
 import type { Field } from './Field';
 import type { Pickups } from './Pickups';
@@ -19,8 +19,8 @@ export interface Battle {
   readonly shots: Projectiles;
   readonly enemies: Enemies;
   readonly pickups: Pickups;
-  /** Пуля игрока попала во врага в точке (x, y). */
-  damageEnemy(e: Enemy, x: number, y: number, damage: number): void;
+  /** Оружие игрока kind попало во врага в точке (x, y). */
+  damageEnemy(e: Enemy, x: number, y: number, damage: number, kind: WeaponKind): void;
   /** Пуля отлетела от щита щитоносца. */
   deflect(x: number, y: number): void;
   destroyEnemy(e: Enemy, byPlayer: boolean): void;
@@ -40,7 +40,7 @@ export function collide(b: Battle) {
     for (const e of enemies.list) {
       if (!near(bullet.s, e.s, bullet.r + e.r) || bullet.hit.includes(e)) continue;
       const { x, y } = bullet.s;
-      const { damage, homing } = bullet;
+      const { damage, homing, kind } = bullet;
       // ракета заходит сбоку — щит её не держит; пробивающую пулю щит останавливает
       const blocked = e.kind === 'shielder' && !homing && shieldBlocks({ x, y }, e.s);
       // игла летит дальше; следующего врага заденет со следующего кадра — список врагов сейчас поменяется
@@ -49,7 +49,7 @@ export function collide(b: Battle) {
         bullet.hit.push(e);
       } else shots.removeBullet(i);
       if (blocked) b.deflect(x, y);
-      else b.damageEnemy(e, x, y, damage);
+      else b.damageEnemy(e, x, y, damage, kind);
       break;
     }
   }
@@ -132,6 +132,6 @@ function beamHits(b: Battle) {
     if (!inBeam(beam, e.s, e.r)) continue;
     const y = Math.min(beam.bottom, e.s.y + e.r);
     if (e.kind === 'shielder' && shieldBlocks({ x: beam.x, y: beam.bottom }, e.s)) b.deflect(beam.x, beam.top);
-    else b.damageEnemy(e, beam.x, y, damage);
+    else b.damageEnemy(e, beam.x, y, damage, 'laser');
   }
 }

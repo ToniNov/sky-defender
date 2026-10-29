@@ -114,7 +114,14 @@ const POWER_UP_LABEL: Partial<Record<PowerUpKind, string>> = {
   bomb: 'БОМБА',
 };
 const POPUP_BONUS_COLOR = 0xffffff;
-const HIT_SPARK_COLOR = 0xffd23f; // искры от попадания по врагу
+/** Искры от попадания по врагу — цвета оружия: сколько и как быстро разлетаются. Ракета ещё и хлопает. */
+const HIT_SPARKS: Record<WeaponKind, { count: number; speed: number }> = {
+  gun: { count: 4, speed: 120 },
+  spread: { count: 2, speed: 90 },
+  laser: { count: 2, speed: 70 }, // луч бьёт тиками часто — искр на тик мало
+  pierce: { count: 5, speed: 200 },
+  rocket: { count: 14, speed: 220 },
+};
 const DEFLECT_COLOR = 0xdfe6f2; // искры от щита щитоносца
 const COIN_COLOR = 0xffd23f;
 const DAMAGE_COLOR = 0xffb020; // игрок потерял жизнь
@@ -179,7 +186,7 @@ export class World {
       shots: this.shots,
       enemies: this.enemies,
       pickups: this.pickups,
-      damageEnemy: (e, x, y, damage) => this.damageEnemy(e, x, y, damage),
+      damageEnemy: (e, x, y, damage, kind) => this.damageEnemy(e, x, y, damage, kind),
       deflect: (x, y) => this.deflect(x, y),
       destroyEnemy: (e, byPlayer) => this.destroyEnemy(e, byPlayer),
       damagePlayer: (cause) => this.damagePlayer(cause),
@@ -347,10 +354,12 @@ export class World {
     sfx.deflect();
   }
 
-  private damageEnemy(e: Enemy, x: number, y: number, damage: number) {
+  private damageEnemy(e: Enemy, x: number, y: number, damage: number, kind: WeaponKind) {
     e.hp -= damage;
     e.flash = 0.07;
-    this.fx.explode(x, y, HIT_SPARK_COLOR, 4, 120);
+    const { count, speed } = HIT_SPARKS[kind];
+    this.fx.explode(x, y, WEAPON_LOOK[kind].color, count, speed);
+    if (kind === 'rocket') sfx.rocketHit();
     this.enemies.drawBar(e);
     if (e.hp > 0) sfx.hit();
     else this.destroyEnemy(e, true);

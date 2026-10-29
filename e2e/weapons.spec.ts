@@ -12,7 +12,11 @@ async function arm(page: Page, kind: string) {
 }
 
 test.describe('лазер', () => {
-  test.beforeEach(({ page }) => arm(page, 'laser'));
+  test.beforeEach(async ({ page }) => {
+    await arm(page, 'laser');
+    // пули пушки, выпущенные до подбора, ещё летят — иначе могут задеть врага, поставленного в тесте
+    await expect.poll(async () => (await snapshot(page)).playerBullets).toBe(0);
+  });
   test('лазер — луч от самолёта вверх, со сменой оружия гаснет', async ({ page }) => {
     const { beam, player, weapon } = await snapshot(page);
     expect(weapon).toEqual({ kind: 'laser', level: 1 });
