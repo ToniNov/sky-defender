@@ -3,6 +3,7 @@ import { sfx } from '../audio';
 import {
   COINS,
   DEFAULT_SKIN,
+  DEFAULT_WEAPON,
   ENEMY,
   NO_UPGRADES,
   PLAYER,
@@ -52,10 +53,11 @@ import { Waves } from './world/Waves';
 export type { EnemyKind } from './balance';
 export type UpdateMode = 'run' | 'idle' | 'frozen';
 
-/** С чем игрок вылетает: улучшения и скин из ангара. */
+/** С чем игрок вылетает: улучшения, скин и стартовое оружие из ангара. */
 export interface Loadout {
   upgrades: Upgrades;
   skin: SkinName;
+  weapon: WeaponKind;
 }
 
 export interface WorldEvents {
@@ -234,12 +236,12 @@ export class World {
     this.deathTimer = 0;
   }
 
-  /** Новая игра с улучшениями и скином из ангара. */
-  reset({ upgrades, skin }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN }) {
+  /** Новая игра с улучшениями, скином и оружием из ангара. */
+  reset({ upgrades, skin, weapon }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN, weapon: DEFAULT_WEAPON }) {
     this.clear();
     this.upgrades = upgrades;
     this.skin = skin;
-    this.player.reset(startStats(upgrades), skin);
+    this.player.reset(startStats(upgrades, weapon), skin);
     this.score = 0;
     this.coinCount = 0;
     this.combo = 0;

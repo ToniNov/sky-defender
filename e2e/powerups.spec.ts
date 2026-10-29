@@ -25,11 +25,11 @@ test('капсула другого вида меняет оружие, уров
 test('HUD показывает вид оружия и уровень', async ({ page }) => {
   const badge = page.locator('.hud-weapon');
   await expect(badge).toHaveAttribute('aria-label', 'Оружие: пушка, уровень 1');
-  await expect(badge.locator('.hud-weapon-badge')).toHaveText('П');
+  await expect(badge.locator('.weapon-badge')).toHaveText('П');
   await pickUp(page, 'weapon', { weapon: 'laser' });
   await pickUp(page, 'weapon', { weapon: 'laser' });
   await expect(badge).toHaveAttribute('aria-label', 'Оружие: лазер, уровень 2');
-  await expect(badge.locator('.hud-weapon-badge')).toHaveText('Л');
+  await expect(badge.locator('.weapon-badge')).toHaveText('Л');
   await expect(badge.locator('i.on')).toHaveCount(2);
 });
 

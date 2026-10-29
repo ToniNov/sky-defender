@@ -216,6 +216,10 @@ describe('старт партии', () => {
     expect(s.reload).toBeCloseTo(1 - 2 * UPGRADES.fireRate.intervalStep);
     expect(s.magnetTime).toBe(POWER_UP.magnetTime + UPGRADES.magnet.timeStep);
   });
+
+  it('оружие из ангара — с уровнем от улучшения «стартовое оружие»', () => {
+    expect(startStats({ ...NO_UPGRADES, startWeapon: 1 }, 'laser').weapon).toEqual({ kind: 'laser', level: 2 });
+  });
 });
 
 describe('враги', () => {

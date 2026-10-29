@@ -109,8 +109,16 @@ export const WEAPONS = {
 
 export type WeaponKind = keyof typeof WEAPONS;
 export const WEAPON_KINDS = Object.keys(WEAPONS) as WeaponKind[];
-/** С этим видом начинается партия. */
+/** С этим видом начинается партия, пока в ангаре не выбран другой. */
 export const DEFAULT_WEAPON: WeaponKind = 'gun';
+/** Цена вида в ангаре: купленный можно выбрать стартовым. В бою капсулы дают любой вид — так его пробуют до покупки. */
+export const WEAPON_COST: Record<WeaponKind, number> = {
+  gun: 0, // есть у всех с начала
+  spread: 150,
+  pierce: 250,
+  laser: 350,
+  rocket: 450,
+};
 
 /** Оружие игрока: вид и уровень (1…PLAYER.maxWeapon). */
 export interface Weapon {
@@ -265,7 +273,7 @@ export const UPGRADES = {
     intervalStep: 0.1, // −10% к паузе между выстрелами за уровень
   },
   startWeapon: {
-    costs: [120, 350], // +1 к стартовому уровню пушки
+    costs: [120, 350], // +1 к стартовому уровню оружия, выбранного в ангаре
   },
   extraLife: {
     costs: [80, 260], // +1 жизнь на старте (не больше PLAYER.maxLives)

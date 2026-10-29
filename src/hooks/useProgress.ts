@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dailyReward, dailyState, dayKey } from '../daily';
-import { SKINS, UPGRADES, type SkinName, type UpgradeName } from '../game/balance';
+import { SKINS, UPGRADES, WEAPON_COST, type SkinName, type UpgradeName, type WeaponKind } from '../game/balance';
 import type { Loadout } from '../game/World';
 import { loadCloudProgress, loadLocalProgress, mergeProgress, saveProgress, type Progress } from '../progress';
 import { claimQuest as claimQuestIn, questComplete } from '../quests';
@@ -8,7 +8,7 @@ import { haptic } from '../telegram';
 import { rewardFeedback } from './feedback';
 import type { ProgressStore } from './types';
 
-/** Сохранение: рекорд, монеты, ангар, скины, задания, награда дня. Сразу с устройства, потом сливается с облаком. */
+/** Сохранение: рекорд, монеты, ангар, скины, оружие, задания, награда дня. Сразу с устройства, потом сливается с облаком. */
 export function useProgress() {
   const [progress, setProgress] = useState<Progress>(loadLocalProgress);
   const [cloudReady, setCloudReady] = useState(false); // пока облако не ответило, награду дня не даём — вдруг уже забрал на другом устройстве
@@ -60,6 +60,23 @@ export function useProgress() {
     [commit],
   );
 
+  /** Купить вид оружия (и сразу сделать стартовым) или выбрать уже купленный. */
+  const pickWeapon = useCallback(
+    (kind: WeaponKind) => {
+      const { coins, weapons } = ref.current;
+      if (weapons.owned.includes(kind)) {
+        if (weapons.selected !== kind) commit({ weapons: { ...weapons, selected: kind } });
+        haptic.impact('light');
+        return;
+      }
+      const cost = WEAPON_COST[kind];
+      if (cost > coins) return;
+      commit({ coins: coins - cost, weapons: { owned: [...weapons.owned, kind], selected: kind } });
+      haptic.notify('success');
+    },
+    [commit],
+  );
+
   const claimDaily = useCallback(() => {
     const p = ref.current;
     const today = dayKey();
@@ -82,8 +99,8 @@ export function useProgress() {
 
   const daily = dailyState(progress.daily);
   const loadout = useMemo<Loadout>(
-    () => ({ upgrades: progress.upgrades, skin: progress.skins.selected }),
-    [progress.upgrades, progress.skins.selected],
+    () => ({ upgrades: progress.upgrades, skin: progress.skins.selected, weapon: progress.weapons.selected }),
+    [progress.upgrades, progress.skins.selected, progress.weapons.selected],
   );
 
   return {
@@ -95,6 +112,7 @@ export function useProgress() {
     questsReady: progress.quests.active.filter(questComplete).length,
     buyUpgrade,
     pickSkin,
+    pickWeapon,
     claimDaily,
     claimQuest,
   };

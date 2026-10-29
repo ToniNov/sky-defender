@@ -40,10 +40,10 @@ export const near = (a: Point, b: Point, d: number) => {
 };
 
 /** С чем игрок начинает партию с учётом улучшений из ангара. */
-export function startStats(upgrades: Upgrades) {
+export function startStats(upgrades: Upgrades, weapon: WeaponKind = DEFAULT_WEAPON) {
   return {
     lives: Math.min(PLAYER.maxLives, PLAYER.startLives + upgrades.extraLife),
-    weapon: { kind: DEFAULT_WEAPON, level: Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon) } satisfies Weapon,
+    weapon: { kind: weapon, level: Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon) } satisfies Weapon,
     /** Множитель паузы между залпами от улучшения скорострельности. */
     reload: 1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate,
     magnetTime: POWER_UP.magnetTime + UPGRADES.magnet.timeStep * upgrades.magnet,

@@ -67,20 +67,38 @@
   margin-top: 8px;
 }
 
-/* капсула вида оружия: цвет и буква, как у капсулы в игре; --weapon задаёт Hud */
-.hud-weapon-badge {
+/* капсула вида оружия (ui/WeaponBadge): цвет и буква, как у капсулы в игре; --weapon задаёт сам значок */
+.weapon-badge {
   display: grid;
   place-items: center;
   width: 26px;
   height: 18px;
-  margin-right: 3px;
   border-radius: 9px;
   background: var(--weapon);
   box-shadow: 0 0 10px color-mix(in srgb, var(--weapon) 60%, transparent);
   color: #1a1030;
   font-size: 12px;
   font-weight: 900;
+}
+
+.weapon-badge.pop {
   animation: combo-pop 0.35s ease-out;
+}
+
+.weapon-badge.big {
+  width: 44px;
+  height: 30px;
+  margin: 4px 0;
+  border-radius: 15px;
+  font-size: 18px;
+}
+
+.weapon-badge.locked {
+  filter: grayscale(0.6) brightness(0.8);
+}
+
+.hud-weapon .weapon-badge {
+  margin-right: 3px;
 }
 
 .hud-weapon i {
@@ -423,6 +441,19 @@
   padding: 0 4px;
   gap: 4px;
   font-size: 14px;
+}
+
+.weapon-about {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hangar-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .skin-state {

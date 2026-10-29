@@ -4,6 +4,7 @@ import { WEAPON_LOOK, weaponCssColor } from '../game/weaponLook';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Heart } from '../ui/Heart';
 import { SoundButton } from '../ui/SoundButton';
+import { WeaponBadge } from '../ui/WeaponBadge';
 
 /** Полоса сверху в бою: очки, комбо, оружие, монеты, жизни, звук и пауза. */
 export function Hud({
@@ -45,9 +46,7 @@ export function Hud({
           aria-label={`Оружие: ${look.label.toLowerCase()}, уровень ${weapon.level}`}
         >
           {/* key меняется с видом — значок заново проигрывает анимацию */}
-          <b key={weapon.kind} className="hud-weapon-badge">
-            {look.letter}
-          </b>
+          <WeaponBadge key={weapon.kind} kind={weapon.kind} className="pop" />
           {Array.from({ length: PLAYER.maxWeapon }, (_, i) => (
             <i key={i} className={i < weapon.level ? 'on' : ''} />
           ))}
