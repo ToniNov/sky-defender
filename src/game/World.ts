@@ -32,6 +32,7 @@ import {
   bossDrop,
   comboMultiplier,
   killScore,
+  mainWeapon,
   pickWeapon,
   rollDrop,
   startStats,
@@ -87,6 +88,12 @@ export interface Death {
   cause: HitCause;
   /** Сколько секунд шла партия (без пауз). */
   seconds: number;
+  /** Оружие в момент гибели (уровень уже после последнего попадания). */
+  weapon: Weapon;
+  /** С каким видом вылетел из ангара. */
+  startWeapon: WeaponKind;
+  /** С каким видом провёл больше всего времени. */
+  mainWeapon: WeaponKind;
 }
 
 interface Star {
@@ -165,7 +172,16 @@ export class World {
   private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
   private skin: SkinName = DEFAULT_SKIN;
   private deathTimer = 0;
-  private death: Death = { cause: 'bullet', seconds: 0 };
+  private death: Death = {
+    cause: 'bullet',
+    seconds: 0,
+    weapon: { kind: DEFAULT_WEAPON, level: 1 },
+    startWeapon: DEFAULT_WEAPON,
+    mainWeapon: DEFAULT_WEAPON,
+  };
+  private startWeapon: WeaponKind = DEFAULT_WEAPON;
+  /** Сколько секунд партии в руках был каждый вид — для аналитики. */
+  private weaponSeconds: Partial<Record<WeaponKind, number>> = {};
   private autoSpawn = true; // e2e-тесты выключают случайных врагов
   private cheats = { noDamage: false, holdFire: false }; // тоже только для тестов
 
@@ -242,6 +258,8 @@ export class World {
     this.clear();
     this.upgrades = upgrades;
     this.skin = skin;
+    this.startWeapon = weapon;
+    this.weaponSeconds = {};
     this.player.reset(startStats(upgrades, weapon), skin);
     this.score = 0;
     this.coinCount = 0;
@@ -274,6 +292,8 @@ export class World {
     this.field.elapsed += dt;
 
     if (this.field.alive) {
+      const { kind } = this.player.weapon;
+      this.weaponSeconds[kind] = (this.weaponSeconds[kind] ?? 0) + dt;
       if (this.player.update(dt, this.keys, this.cheats.holdFire)) this.shots.firePlayer();
       if (this.autoSpawn) this.waves.update(dt);
     } else if (this.deathTimer > 0) {
@@ -342,7 +362,13 @@ export class World {
       return;
     }
     this.field.alive = false;
-    this.death = { cause, seconds: this.field.elapsed };
+    this.death = {
+      cause,
+      seconds: this.field.elapsed,
+      weapon: p.weapon,
+      startWeapon: this.startWeapon,
+      mainWeapon: mainWeapon(this.weaponSeconds, this.startWeapon),
+    };
     p.view.visible = false;
     this.fx.explode(x, y, DEATH_COLOR, 50, 400);
     this.fx.explode(x, y, 0xffffff, 20, 200);

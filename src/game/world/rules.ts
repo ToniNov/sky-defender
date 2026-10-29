@@ -74,6 +74,20 @@ export function beamTop(x: number, bottom: number, shielders: readonly Point[], 
 export const inBeam = (b: Beam, p: Point, r: number) =>
   Math.abs(p.x - b.x) < b.half + r && p.y + r > b.top && p.y - r < b.bottom;
 
+/** Вид, с которым провели больше всего времени (seconds — секунды по видам). При равенстве — первый по WEAPON_KINDS. */
+export function mainWeapon(seconds: Partial<Record<WeaponKind, number>>, fallback: WeaponKind): WeaponKind {
+  let best = fallback;
+  let bestT = seconds[fallback] ?? 0;
+  for (const kind of WEAPON_KINDS) {
+    const t = seconds[kind] ?? 0;
+    if (t > bestT) {
+      best = kind;
+      bestT = t;
+    }
+  }
+  return best;
+}
+
 /** Подобрано оружие kind: тот же вид — уровень +1 (не выше максимума), другой — смена вида с тем же уровнем. */
 export const pickWeapon = (weapon: Weapon, kind: WeaponKind): Weapon =>
   kind === weapon.kind ? { kind, level: Math.min(PLAYER.maxWeapon, weapon.level + 1) } : { kind, level: weapon.level };

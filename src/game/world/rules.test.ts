@@ -12,6 +12,7 @@ import {
   inBeam,
   killScore,
   loseWeaponLevel,
+  mainWeapon,
   near,
   nearest,
   nextWeaponKind,
@@ -102,6 +103,20 @@ describe('оружие', () => {
   it('пауза между залпами — от вида и скорострельности', () => {
     expect(fireInterval(gun(1), 1)).toBe(WEAPONS.gun.interval);
     expect(fireInterval(gun(3), 0.8)).toBeCloseTo(WEAPONS.gun.interval * 0.8);
+  });
+});
+
+describe('основное оружие партии', () => {
+  it('то, с которым провели больше всего времени', () => {
+    expect(mainWeapon({ gun: 10, laser: 25, rocket: 5 }, 'gun')).toBe('laser');
+  });
+
+  it('без смен оружия — стартовое', () => {
+    expect(mainWeapon({}, 'spread')).toBe('spread');
+  });
+
+  it('при равенстве остаётся стартовое', () => {
+    expect(mainWeapon({ gun: 10, pierce: 10 }, 'pierce')).toBe('pierce');
   });
 });
 

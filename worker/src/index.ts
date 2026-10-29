@@ -230,9 +230,24 @@ async function recordEvent(request: Request, env: Env): Promise<Response> {
   if (!e) return fail('bad-event', 400);
   const run = e.type === 'run' ? e : null;
   await env.DB.prepare(
-    'INSERT INTO events (at, type, device, version, platform, score, wave, seconds, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    `INSERT INTO events (at, type, device, version, platform, score, wave, seconds, cause, weapon, weapon_level, start_weapon, main_weapon)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(Date.now(), e.type, e.device, e.version, e.platform, run?.score ?? null, run?.wave ?? null, run?.seconds ?? null, run?.cause ?? null)
+    .bind(
+      Date.now(),
+      e.type,
+      e.device,
+      e.version,
+      e.platform,
+      run?.score ?? null,
+      run?.wave ?? null,
+      run?.seconds ?? null,
+      run?.cause ?? null,
+      run?.weapon ?? null,
+      run?.weaponLevel ?? null,
+      run?.startWeapon ?? null,
+      run?.mainWeapon ?? null,
+    )
     .run();
   return json({ ok: true });
 }
