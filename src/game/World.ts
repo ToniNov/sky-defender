@@ -7,14 +7,16 @@ import {
   NO_UPGRADES,
   PLAYER,
   POWER_UP,
+  WEAPONS,
   type EnemyKind,
   type PowerUpKind,
   type SkinName,
   type Upgrades,
   type Weapon,
+  type WeaponKind,
 } from './balance';
 import type { WorldDebug } from './debug';
-import type { Textures } from './textures';
+import { WEAPON_LOOK, type Textures } from './textures';
 import { FORMATIONS, type FormationName } from './waves';
 import { collide, type Battle, type HitCause } from './world/collisions';
 import { Effects } from './world/Effects';
@@ -98,14 +100,14 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   splitter: 0xff8fd8,
   mini: 0xff8fd8,
 };
-const POWER_UP_COLOR: Record<PowerUpKind, number> = {
-  gun: 0xffd23f,
+/** Искры при подборе; у капсулы оружия — цвет её вида (WEAPON_LOOK). */
+const POWER_UP_COLOR: Record<Exclude<PowerUpKind, 'weapon'>, number> = {
   life: 0xff4d8d,
   shield: 0x5fd4ff,
   magnet: 0xff6b6b,
   bomb: 0xff9f1c,
 };
-/** Подпись при подборе: для пушки и жизни хватает HUD, остальные стоит назвать. */
+/** Подпись при подборе: для оружия (если сменился вид — его название) и жизни хватает HUD, остальные стоит назвать. */
 const POWER_UP_LABEL: Partial<Record<PowerUpKind, string>> = {
   shield: 'ЩИТ',
   magnet: 'МАГНИТ',
@@ -407,15 +409,17 @@ export class World {
   }
 
   private pickPowerUp(i: number) {
-    const { s, kind } = this.pickups.powerUps[i];
+    const { s, kind, weapon } = this.pickups.powerUps[i];
     const { x, y } = s;
     // убираем до применения: бомба может породить новые бонусы
     this.pickups.removePowerUp(i);
     this.score += POWER_UP.points;
     this.ev.score(this.score);
     const p = this.player;
-    if (kind === 'gun') {
-      p.weapon = pickWeapon(p.weapon, p.weapon.kind);
+    let label = kind === 'weapon' ? undefined : POWER_UP_LABEL[kind];
+    if (kind === 'weapon') {
+      if (weapon !== p.weapon.kind) label = WEAPON_LOOK[weapon].label;
+      p.weapon = pickWeapon(p.weapon, weapon);
       this.ev.weapon(p.weapon);
     } else if (kind === 'life') {
       p.lives = addLife(p.lives);
@@ -427,11 +431,10 @@ export class World {
     } else {
       this.detonateBomb();
     }
-    const label = POWER_UP_LABEL[kind];
     this.fx.popup(x, y - 20, label ? `${label} +${POWER_UP.points}` : `+${POWER_UP.points}`, POPUP_BONUS_COLOR);
     this.ev.powerUp();
     sfx.powerUp();
-    this.fx.explode(x, y, POWER_UP_COLOR[kind], 12, 160);
+    this.fx.explode(x, y, kind === 'weapon' ? WEAPON_LOOK[weapon].color : POWER_UP_COLOR[kind], 12, 160);
   }
 
   /** Бомба: сбивает всех врагов на экране, ранит босса и стирает вражеские пули. */
@@ -484,11 +487,16 @@ export class World {
           ...(e.kind === 'mother' ? { attack: bossAttack(e) } : {}),
           ...pos(e.s),
         })),
-        powerUps: this.pickups.powerUps.map((u) => ({ kind: u.kind, ...pos(u.s) })),
+        powerUps: this.pickups.powerUps.map((u) => ({
+          kind: u.kind,
+          ...(u.kind === 'weapon' ? { weapon: u.weapon } : {}),
+          ...pos(u.s),
+        })),
         coinsOnField: this.pickups.coins.map((c) => ({ kind: 'coin', ...pos(c.s) })),
         missiles: this.shots.missiles.map((m) => ({ kind: 'missile', ...pos(m.s) })),
         enemyBullets: this.shots.enemyBullets.length,
         playerBullets: this.shots.bullets.length,
+        playerBulletPositions: this.shots.bullets.map((b) => pos(b.s)),
       }),
       setAutoSpawn: (on) => {
         this.autoSpawn = on;
@@ -498,9 +506,14 @@ export class World {
         const e = this.enemies.spawn(kind as EnemyKind, x);
         e.s.y = y;
       },
-      spawnPowerUp: (kind, x, y) => {
+      spawnPowerUp: (kind, x, y, capsule = {}) => {
         if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
-        this.pickups.spawnPowerUp(x, y, kind as PowerUpKind);
+        const weapon = capsule.weapon ?? p.weapon.kind;
+        if (!(weapon in WEAPONS)) throw new Error(`Нет такого оружия: ${weapon}`);
+        this.pickups.spawnPowerUp(x, y, kind as PowerUpKind, {
+          weapon: weapon as WeaponKind,
+          cycles: capsule.cycles ?? false,
+        });
       },
       spawnCoin: (x, y) => this.pickups.spawnCoin(x, y),
       startWave: (n) => {

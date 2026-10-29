@@ -41,8 +41,8 @@ test('босс рассыпает монеты', async ({ page }) => {
   await startGame(page);
   await setCheats(page, { noDamage: true });
   // пушка третьего уровня, чтобы босс падал за несколько секунд
-  await pickUp(page, 'gun');
-  await pickUp(page, 'gun');
+  await pickUp(page, 'weapon');
+  await pickUp(page, 'weapon');
   const { w } = await snapshot(page);
   await movePlayer(page, w / 2, 9999);
   await spawnEnemy(page, 'mother', w / 2, 120);

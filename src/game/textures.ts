@@ -1,5 +1,5 @@
-import { Graphics, type Renderer, type Texture } from 'pixi.js';
-import { SKIN_NAMES, type SkinName } from './balance';
+import { Container, Graphics, Text, type Renderer, type Texture } from 'pixi.js';
+import { SKIN_NAMES, WEAPON_KINDS, type SkinName, type WeaponKind } from './balance';
 import type { ShipTextures } from './ships';
 import { skinSvg } from './skins';
 
@@ -12,8 +12,20 @@ import { skinSvg } from './skins';
 export type PlaneTextureName = `plane_${SkinName}`;
 export const planeTexture = (skin: SkinName): PlaneTextureName => `plane_${skin}`;
 
+/** Как выглядит вид оружия: цвет и буква капсулы, название при смене. */
+export const WEAPON_LOOK: Record<WeaponKind, { color: number; letter: string; label: string }> = {
+  gun: { color: 0xffd23f, letter: 'П', label: 'ПУШКА' },
+  spread: { color: 0x6ff2c0, letter: 'В', label: 'ВЕЕР' },
+};
+const CAPSULE_LETTER_COLOR = 0x1a1030;
+
+/** Капсула оружия каждого вида: capsule_gun, capsule_spread… */
+export type CapsuleTextureName = `capsule_${WeaponKind}`;
+export const capsuleTexture = (kind: WeaponKind): CapsuleTextureName => `capsule_${kind}`;
+
 export type TextureName =
   | PlaneTextureName
+  | CapsuleTextureName
   | 'flame'
   | 'bullet'
   | 'enemyBullet'
@@ -27,7 +39,6 @@ export type TextureName =
   | 'mini'
   | 'spark'
   | 'star'
-  | 'gun'
   | 'life'
   | 'shield'
   | 'magnet'
@@ -51,9 +62,32 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     SKIN_NAMES.map((skin) => [planeTexture(skin), bake((g) => g.svg(skinSvg(skin)))]),
   ) as Record<PlaneTextureName, Texture>;
 
+  // Капсула оружия: таблетка цвета вида с буквой
+  const capsules = Object.fromEntries(
+    WEAPON_KINDS.map((kind) => {
+      const { color, letter } = WEAPON_LOOK[kind];
+      const c = new Container();
+      const g = new Graphics();
+      g.circle(16, 16, 16).fill({ color, alpha: 0.25 });
+      g.roundRect(3, 7, 26, 18, 9).fill(color);
+      g.roundRect(6, 9, 20, 5, 2.5).fill({ color: 0xffffff, alpha: 0.45 });
+      const t = new Text({
+        text: letter,
+        style: { fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: '900', fill: CAPSULE_LETTER_COLOR },
+      });
+      t.anchor.set(0.5);
+      t.position.set(16, 16.5);
+      c.addChild(g, t);
+      const texture = renderer.generateTexture({ target: c, resolution: 3, antialias: true });
+      c.destroy({ children: true });
+      return [capsuleTexture(kind), texture];
+    }),
+  ) as Record<CapsuleTextureName, Texture>;
+
   return {
     // Самолёты игрока (носом вверх, ~60×58) — рисунки в skins.ts
     ...planes,
+    ...capsules,
 
     flame: bake((g) => {
       g.poly([0, 0, 10, 0, 5, 18]).fill(0xff8a00);
@@ -162,13 +196,6 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
 
     star: bake((g) => {
       g.circle(2, 2, 2).fill(0xffffff);
-    }),
-
-    // Бонус: усиление пушки
-    gun: bake((g) => {
-      g.circle(14, 14, 14).fill({ color: 0xffd23f, alpha: 0.25 });
-      g.star(14, 14, 5, 11, 5).fill(0xffd23f);
-      g.star(14, 14, 5, 6, 2.6).fill(0xffffff);
     }),
 
     // Бонус: дополнительная жизнь

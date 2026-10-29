@@ -11,6 +11,7 @@ import {
   killScore,
   loseWeaponLevel,
   near,
+  nextWeaponKind,
   pickWeapon,
   rollDrop,
   shieldBlocks,
@@ -20,8 +21,7 @@ import {
 } from './rules';
 
 const gun = (level: number): Weapon => ({ kind: 'gun', level });
-// второй вид для проверки смены; пока он один, подойдёт подменённое имя — функции не смотрят в WEAPONS
-const other = (level: number) => ({ kind: 'other', level }) as unknown as Weapon;
+const spread = (level: number): Weapon => ({ kind: 'spread', level });
 
 describe('столкновения', () => {
   it('near: касание кругов по сумме радиусов', () => {
@@ -71,13 +71,21 @@ describe('оружие', () => {
   });
 
   it('другой вид — смена вида, уровень сохраняется', () => {
-    expect(pickWeapon(other(2), 'gun')).toEqual(gun(2));
-    expect(pickWeapon(gun(PLAYER.maxWeapon), other(1).kind)).toEqual(other(PLAYER.maxWeapon));
+    expect(pickWeapon(spread(2), 'gun')).toEqual(gun(2));
+    expect(pickWeapon(gun(PLAYER.maxWeapon), 'spread')).toEqual(spread(PLAYER.maxWeapon));
+  });
+
+  it('капсула перебирает все виды по кругу', () => {
+    let kind = WEAPON_KINDS[0];
+    const seen = new Set([kind]);
+    for (let i = 1; i < WEAPON_KINDS.length; i++) seen.add((kind = nextWeaponKind(kind)));
+    expect(seen.size).toBe(WEAPON_KINDS.length);
+    expect(nextWeaponKind(kind)).toBe(WEAPON_KINDS[0]);
   });
 
   it('при уроне теряется уровень, вид остаётся', () => {
-    expect(loseWeaponLevel(other(3))).toEqual(other(2));
-    expect(loseWeaponLevel(other(1))).toEqual(other(1));
+    expect(loseWeaponLevel(spread(3))).toEqual(spread(2));
+    expect(loseWeaponLevel(spread(1))).toEqual(spread(1));
   });
 
   it('у каждого вида залп на каждый уровень', () => {
@@ -115,11 +123,11 @@ describe('очки и комбо', () => {
 
 describe('бонусы', () => {
   it('rollDrop раскладывает [0, 1) по шансам из POWER_UP.drops', () => {
-    const { gun, life } = POWER_UP.drops;
-    expect(rollDrop(0)).toBe('gun');
-    expect(rollDrop(gun - 1e-9)).toBe('gun');
-    expect(rollDrop(gun)).toBe('life');
-    expect(rollDrop(gun + life)).toBe('shield');
+    const { weapon, life } = POWER_UP.drops;
+    expect(rollDrop(0)).toBe('weapon');
+    expect(rollDrop(weapon - 1e-9)).toBe('weapon');
+    expect(rollDrop(weapon)).toBe('life');
+    expect(rollDrop(weapon + life)).toBe('shield');
     expect(rollDrop(0.999)).toBeNull(); // чаще всего не выпадает ничего
   });
 
@@ -131,10 +139,10 @@ describe('бонусы', () => {
     expect(dropped / n).toBeCloseTo(total, 3);
   });
 
-  it('с босса — жизнь, если есть куда и повезло, иначе пушка', () => {
+  it('с босса — жизнь, если есть куда и повезло, иначе капсула оружия', () => {
     expect(bossDrop(3, 0)).toBe('life');
-    expect(bossDrop(3, 0.99)).toBe('gun');
-    expect(bossDrop(PLAYER.maxLives, 0)).toBe('gun');
+    expect(bossDrop(3, 0.99)).toBe('weapon');
+    expect(bossDrop(PLAYER.maxLives, 0)).toBe('weapon');
   });
 
   it('жизни не выше максимума', () => {

@@ -103,8 +103,8 @@ test('задание «за партию» берёт лучший резуль�
 /** Сбить флагмана пушкой третьего уровня (игрок неуязвим); spawn — поставить нового, иначе добить того, что на поле. */
 async function killBoss(page: Page, { spawn = true } = {}) {
   await setCheats(page, { noDamage: true, holdFire: false });
-  await pickUp(page, 'gun');
-  await pickUp(page, 'gun');
+  await pickUp(page, 'weapon');
+  await pickUp(page, 'weapon');
   const { player } = await snapshot(page);
   if (spawn) await spawnEnemy(page, 'mother', player.x, 120);
   await expect

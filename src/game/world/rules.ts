@@ -6,6 +6,7 @@ import {
   PLAYER,
   POWER_UP,
   UPGRADES,
+  WEAPON_KINDS,
   WEAPONS,
   type EnemyKind,
   type PowerUpKind,
@@ -56,6 +57,10 @@ export const fireInterval = (weapon: Weapon, reload: number) => WEAPONS[weapon.k
 export const pickWeapon = (weapon: Weapon, kind: WeaponKind): Weapon =>
   kind === weapon.kind ? { kind, level: Math.min(PLAYER.maxWeapon, weapon.level + 1) } : { kind, level: weapon.level };
 
+/** Следующий вид оружия в капсуле: по кругу WEAPON_KINDS. */
+export const nextWeaponKind = (kind: WeaponKind): WeaponKind =>
+  WEAPON_KINDS[(WEAPON_KINDS.indexOf(kind) + 1) % WEAPON_KINDS.length];
+
 /** Урон по игроку: вид остаётся, уровень −1, но не ниже первого. */
 export const loseWeaponLevel = (weapon: Weapon): Weapon => ({ kind: weapon.kind, level: Math.max(1, weapon.level - 1) });
 
@@ -95,9 +100,9 @@ export function rollDrop(r: number): PowerUpKind | null {
   return null;
 }
 
-/** Бонус с босса всегда есть: жизнь (с шансом, если есть куда) или пушка. */
+/** Бонус с босса всегда есть: жизнь (с шансом, если есть куда) или капсула оружия. */
 export const bossDrop = (lives: number, r: number): PowerUpKind =>
-  lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'gun';
+  lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'weapon';
 
 export const addLife = (lives: number) => Math.min(PLAYER.maxLives, lives + 1);
 

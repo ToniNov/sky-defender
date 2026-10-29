@@ -39,6 +39,17 @@ export const WEAPONS = {
       [[0, 0], [-12, -150], [12, 150]],
     ],
   },
+  // веер: широкий конус слабых пуль — против роя, но по одной цели слабее пушки
+  spread: {
+    interval: 0.2,
+    damage: 0.5,
+    bulletSpeed: 640,
+    patterns: [
+      [[0, 0], [-6, -200], [6, 200]],
+      [[0, 0], [-6, -140], [6, 140], [-10, -280], [10, 280]],
+      [[0, 0], [-5, -110], [5, 110], [-8, -220], [8, 220], [-12, -330], [12, 330]],
+    ],
+  },
 } as const satisfies Record<string, { interval: number; damage: number; bulletSpeed: number; patterns: readonly Volley[] }>;
 
 export type WeaponKind = keyof typeof WEAPONS;
@@ -164,13 +175,14 @@ export const BOSS = {
 export const POWER_UP = {
   // шанс выпадения каждого бонуса с обычного врага (в сумме — шанс любого)
   drops: {
-    gun: 0.06,
+    weapon: 0.06, // капсула оружия
     life: 0.03,
     shield: 0.03,
     magnet: 0.025,
     bomb: 0.015,
   },
-  bossLifeChance: 0.5, // с босса всегда бонус: жизнь (если не максимум) или пушка
+  bossLifeChance: 0.5, // с босса всегда бонус: жизнь (если не максимум) или капсула оружия
+  weaponCycle: 2, // вид оружия в летящей капсуле меняется с таким периодом
   fallSpeed: 110,
   points: 50,
   shieldBreakInvuln: 1, // неуязвимость после того, как щит принял удар

@@ -1,20 +1,51 @@
 import { expect, test } from '@playwright/test';
+import { POWER_UP } from '../src/game/balance.ts';
 import { pickUp, snapshot, spawnEnemy, spawnPowerUp, startGame } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
   await startGame(page);
 });
 
-test('пушка и жизнь', async ({ page }) => {
-  await pickUp(page, 'gun');
+test('капсула того же оружия и жизнь', async ({ page }) => {
+  await pickUp(page, 'weapon');
   await pickUp(page, 'life');
   const s = await snapshot(page);
   expect(s.weapon).toEqual({ kind: 'gun', level: 2 });
   expect(s.lives).toBe(4);
 });
 
+test('капсула другого вида меняет оружие, уровень остаётся', async ({ page }) => {
+  await pickUp(page, 'weapon');
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 2 });
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 3 });
+});
+
+test('вид в летящей капсуле меняется', async ({ page }) => {
+  const { w } = await snapshot(page);
+  await spawnPowerUp(page, 'weapon', w / 2, -200, { weapon: 'gun', cycles: true });
+  const capsule = async () => (await snapshot(page)).powerUps.find((u) => u.kind === 'weapon')?.weapon;
+  expect(await capsule()).toBe('gun');
+  await expect.poll(capsule, { timeout: POWER_UP.weaponCycle * 1000 + 2000 }).toBe('spread');
+});
+
+test('веер стреляет широким конусом, пушка — прямо', async ({ page }) => {
+  // самый дальний от самолёта по горизонтали полёт пули
+  const spread = async () => {
+    const { player, playerBulletPositions } = await snapshot(page);
+    return Math.max(0, ...playerBulletPositions.map((b) => Math.abs(b.x - player.x)));
+  };
+  await page.waitForTimeout(500);
+  expect(await spread()).toBeLessThan(5); // пушка первого уровня — одна пуля строго вверх
+
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  await expect.poll(spread).toBeGreaterThan(100);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
+});
+
 test('урон снимает уровень оружия, но не вид', async ({ page }) => {
-  await pickUp(page, 'gun');
+  await pickUp(page, 'weapon');
   const { player } = await snapshot(page);
   await spawnEnemy(page, 'scout', player.x, player.y);
   await expect.poll(async () => (await snapshot(page)).lives).toBe(2);
@@ -42,7 +73,7 @@ test('магнит притягивает бонус с другого края 
   expect((await snapshot(page)).magnet).toBeGreaterThan(0);
 
   const { w } = await snapshot(page);
-  await spawnPowerUp(page, 'gun', w - 20, 60);
+  await spawnPowerUp(page, 'weapon', w - 20, 60);
   await expect.poll(async () => (await snapshot(page)).weapon.level).toBe(2);
 });
 
