@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PLAYER, POWER_UP, UPGRADES } from '../src/game/balance.ts';
+import { PLAYER, POWER_UP, UPGRADES, WEAPONS } from '../src/game/balance.ts';
 import { pickUp, snapshot } from './helpers.ts';
 import { SAVE_VERSION } from '../src/progress.ts';
 
@@ -56,9 +56,9 @@ test('улучшения действуют в партии', async ({ page }) =
   await openWithSave(page, { coins: 0, upgrades: { fireRate: 2, startWeapon: 1, extraLife: 2, magnet: 1 } });
   await launch(page);
   const s = await snapshot(page);
-  expect(s.weapon).toBe(2);
+  expect(s.weapon.level).toBe(2);
   expect(s.lives).toBe(Math.min(PLAYER.maxLives, PLAYER.startLives + 2));
-  expect(s.fireInterval).toBeCloseTo(PLAYER.fireInterval * (1 - 2 * UPGRADES.fireRate.intervalStep));
+  expect(s.fireInterval).toBeCloseTo(WEAPONS.gun.interval * (1 - 2 * UPGRADES.fireRate.intervalStep));
 
   await pickUp(page, 'magnet');
   expect((await snapshot(page)).magnet).toBeGreaterThan(POWER_UP.magnetTime);
@@ -68,9 +68,9 @@ test('без покупок всё как раньше', async ({ page }) => {
   await openWithSave(page, { coins: 0 });
   await launch(page);
   const s = await snapshot(page);
-  expect(s.weapon).toBe(1);
+  expect(s.weapon.level).toBe(1);
   expect(s.lives).toBe(PLAYER.startLives);
-  expect(s.fireInterval).toBeCloseTo(PLAYER.fireInterval);
+  expect(s.fireInterval).toBeCloseTo(WEAPONS.gun.interval);
 });
 
 test('сохранение версии 1 получает пустые улучшения и не теряет монеты', async ({ page }) => {

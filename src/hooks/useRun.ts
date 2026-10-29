@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackRun } from '../analytics';
 import { startRun, submitScore } from '../api';
 import { unlockAudio } from '../audio';
-import type { QuestKind } from '../game/balance';
+import { DEFAULT_WEAPON, type QuestKind, type Weapon } from '../game/balance';
 import type { Phase } from '../game/Game';
 import type { WorldEvents } from '../game/World';
 import { applyRun, emptyRunStats, questComplete, type Quest, type RunStats } from '../quests';
@@ -19,7 +19,7 @@ export function useRun(store: ProgressStore, phase: Phase, setPhase: (phase: Pha
   const [session, setSession] = useState(0);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
-  const [weapon, setWeapon] = useState(1);
+  const [weapon, setWeapon] = useState<Weapon>({ kind: DEFAULT_WEAPON, level: 1 });
   const [combo, setCombo] = useState(1);
   const [coins, setCoins] = useState(0);
   const [newRecord, setNewRecord] = useState(false);

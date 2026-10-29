@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMBO, DIFFICULTY_TIME, ENEMY, NO_UPGRADES, PLAYER, POWER_UP, UPGRADES } from '../balance';
+import { COMBO, DIFFICULTY_TIME, ENEMY, NO_UPGRADES, PLAYER, POWER_UP, UPGRADES, WEAPON_KINDS, WEAPONS, type Weapon } from '../balance';
 import {
   addLife,
   bossAttackAt,
@@ -7,15 +7,21 @@ import {
   bossHp,
   comboMultiplier,
   difficulty,
+  fireInterval,
   killScore,
+  loseWeaponLevel,
   near,
+  pickWeapon,
   rollDrop,
   shieldBlocks,
   startStats,
   takeHit,
   turnToward,
-  upgradeWeapon,
 } from './rules';
+
+const gun = (level: number): Weapon => ({ kind: 'gun', level });
+// второй вид для проверки смены; пока он один, подойдёт подменённое имя — функции не смотрят в WEAPONS
+const other = (level: number) => ({ kind: 'other', level }) as unknown as Weapon;
 
 describe('столкновения', () => {
   it('near: касание кругов по сумме радиусов', () => {
@@ -34,27 +40,53 @@ describe('столкновения', () => {
 
 describe('попадание в игрока', () => {
   it('щит принимает удар целиком', () => {
-    expect(takeHit({ lives: 3, weapon: 3, shield: true, combo: 12 })).toEqual({
+    expect(takeHit({ lives: 3, weapon: gun(3), shield: true, combo: 12 })).toEqual({
       lives: 3,
-      weapon: 3,
+      weapon: gun(3),
       shield: false,
       combo: 12,
       absorbed: true,
     });
   });
 
-  it('без щита — минус жизнь, минус уровень пушки, комбо с нуля', () => {
-    expect(takeHit({ lives: 3, weapon: 3, shield: false, combo: 12 })).toEqual({
+  it('без щита — минус жизнь, минус уровень оружия, комбо с нуля', () => {
+    expect(takeHit({ lives: 3, weapon: gun(3), shield: false, combo: 12 })).toEqual({
       lives: 2,
-      weapon: 2,
+      weapon: gun(2),
       shield: false,
       combo: 0,
       absorbed: false,
     });
   });
 
-  it('пушка не опускается ниже первого уровня', () => {
-    expect(takeHit({ lives: 2, weapon: 1, shield: false, combo: 0 }).weapon).toBe(1);
+  it('оружие не опускается ниже первого уровня', () => {
+    expect(takeHit({ lives: 2, weapon: gun(1), shield: false, combo: 0 }).weapon).toEqual(gun(1));
+  });
+});
+
+describe('оружие', () => {
+  it('тот же вид — уровень +1, но не выше максимума', () => {
+    expect(pickWeapon(gun(1), 'gun')).toEqual(gun(2));
+    expect(pickWeapon(gun(PLAYER.maxWeapon), 'gun')).toEqual(gun(PLAYER.maxWeapon));
+  });
+
+  it('другой вид — смена вида, уровень сохраняется', () => {
+    expect(pickWeapon(other(2), 'gun')).toEqual(gun(2));
+    expect(pickWeapon(gun(PLAYER.maxWeapon), other(1).kind)).toEqual(other(PLAYER.maxWeapon));
+  });
+
+  it('при уроне теряется уровень, вид остаётся', () => {
+    expect(loseWeaponLevel(other(3))).toEqual(other(2));
+    expect(loseWeaponLevel(other(1))).toEqual(other(1));
+  });
+
+  it('у каждого вида залп на каждый уровень', () => {
+    for (const kind of WEAPON_KINDS) expect(WEAPONS[kind].patterns).toHaveLength(PLAYER.maxWeapon);
+  });
+
+  it('пауза между залпами — от вида и скорострельности', () => {
+    expect(fireInterval(gun(1), 1)).toBe(WEAPONS.gun.interval);
+    expect(fireInterval(gun(3), 0.8)).toBeCloseTo(WEAPONS.gun.interval * 0.8);
   });
 });
 
@@ -105,9 +137,7 @@ describe('бонусы', () => {
     expect(bossDrop(PLAYER.maxLives, 0)).toBe('gun');
   });
 
-  it('пушка и жизни не выше максимума', () => {
-    expect(upgradeWeapon(1)).toBe(2);
-    expect(upgradeWeapon(PLAYER.maxWeapon)).toBe(PLAYER.maxWeapon);
+  it('жизни не выше максимума', () => {
     expect(addLife(3)).toBe(4);
     expect(addLife(PLAYER.maxLives)).toBe(PLAYER.maxLives);
   });
@@ -117,17 +147,17 @@ describe('старт партии', () => {
   it('без улучшений — значения из balance.ts', () => {
     expect(startStats(NO_UPGRADES)).toEqual({
       lives: PLAYER.startLives,
-      weapon: 1,
-      fireInterval: PLAYER.fireInterval,
+      weapon: gun(1),
+      reload: 1,
       magnetTime: POWER_UP.magnetTime,
     });
   });
 
   it('улучшения из ангара, жизни и пушка не выше максимума', () => {
     const s = startStats({ fireRate: 2, startWeapon: 9, extraLife: 9, magnet: 1 });
-    expect(s.weapon).toBe(PLAYER.maxWeapon);
+    expect(s.weapon).toEqual(gun(PLAYER.maxWeapon));
     expect(s.lives).toBe(PLAYER.maxLives);
-    expect(s.fireInterval).toBeCloseTo(PLAYER.fireInterval * (1 - 2 * UPGRADES.fireRate.intervalStep));
+    expect(s.reload).toBeCloseTo(1 - 2 * UPGRADES.fireRate.intervalStep);
     expect(s.magnetTime).toBe(POWER_UP.magnetTime + UPGRADES.magnet.timeStep);
   });
 });

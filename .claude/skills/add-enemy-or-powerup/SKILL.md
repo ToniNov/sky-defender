@@ -34,7 +34,7 @@ description: Добавить в игру нового врага или нов�
 3. **Цвет и подпись** — `POWER_UP_COLOR` (обязательно) и `POWER_UP_LABEL` (если HUD не показывает эффект) в `src/game/World.ts`.
 4. **Эффект** — ветка в подборе бонуса в `World.ts` (`if (kind === 'gun') … else if …`). ⚠️ Последний `else` там — бомба: без своей ветки новый бонус взорвёт экран.
    - Состояние на игроке (таймер, флаг) — в `src/game/world/Player.ts`: поле, `set<Kind>()`, отсчёт в `update(dt)`, сброс в `hide()` (как `setMagnet(0)`), а время действия с учётом ангара — в `reset()`.
-   - Формула (сила, ограничение) — чистой функцией в `rules.ts` с тестом, как `upgradeWeapon` / `addLife`.
+   - Формула (сила, ограничение) — чистой функцией в `rules.ts` с тестом, как `pickWeapon` / `addLife`.
 5. **Улучшение в ангаре (по желанию)** — `UPGRADES` в `balance.ts`, применение в `startStats` (`rules.ts`) + тест, подпись в `UPGRADE_INFO` (`src/screens/HangarScreen.tsx`). Новое поле в сохранении → проверь миграции `progress.ts` и `progress.test.ts`.
 6. **e2e** — тест в `e2e/powerups.spec.ts`: `spawnPowerUp(page, '<kind>', player.x, player.y - 60)`, дождаться подбора, проверить эффект в `snapshot`. Нет нужного поля — добавь в `DebugSnapshot` и `debugApi()`, как `magnet`/`shield`.
 

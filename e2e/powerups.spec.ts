@@ -9,8 +9,16 @@ test('пушка и жизнь', async ({ page }) => {
   await pickUp(page, 'gun');
   await pickUp(page, 'life');
   const s = await snapshot(page);
-  expect(s.weapon).toBe(2);
+  expect(s.weapon).toEqual({ kind: 'gun', level: 2 });
   expect(s.lives).toBe(4);
+});
+
+test('урон снимает уровень оружия, но не вид', async ({ page }) => {
+  await pickUp(page, 'gun');
+  const { player } = await snapshot(page);
+  await spawnEnemy(page, 'scout', player.x, player.y);
+  await expect.poll(async () => (await snapshot(page)).lives).toBe(2);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'gun', level: 1 });
 });
 
 test('щит принимает таран вместо жизни', async ({ page }) => {
@@ -35,7 +43,7 @@ test('магнит притягивает бонус с другого края 
 
   const { w } = await snapshot(page);
   await spawnPowerUp(page, 'gun', w - 20, 60);
-  await expect.poll(async () => (await snapshot(page)).weapon).toBe(2);
+  await expect.poll(async () => (await snapshot(page)).weapon.level).toBe(2);
 });
 
 test('бомба сбивает врагов на экране и ранит босса', async ({ page }) => {

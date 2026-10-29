@@ -51,7 +51,7 @@ function GameScene({ phase, session, events, loadout, ships }: Props & { ships: 
     return new World(makeTextures(app.renderer, ships), {
       score: (n) => ev().score(n),
       lives: (n) => ev().lives(n),
-      weapon: (n) => ev().weapon(n),
+      weapon: (w) => ev().weapon(w),
       combo: (m) => ev().combo(m),
       hit: () => ev().hit(),
       kill: (k) => ev().kill(k),

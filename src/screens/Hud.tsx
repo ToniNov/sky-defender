@@ -1,3 +1,4 @@
+import { PLAYER, type Weapon } from '../game/balance';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Heart } from '../ui/Heart';
 import { SoundButton } from '../ui/SoundButton';
@@ -15,7 +16,7 @@ export function Hud({
 }: {
   score: number;
   combo: number;
-  weapon: number;
+  weapon: Weapon;
   coins: number;
   lives: number;
   soundOn: boolean;
@@ -35,9 +36,9 @@ export function Hud({
             </span>
           )}
         </span>
-        <span className="hud-weapon" aria-label={`Пушка: уровень ${weapon}`}>
-          {[1, 2, 3].map((n) => (
-            <i key={n} className={n <= weapon ? 'on' : ''} />
+        <span className="hud-weapon" aria-label={`Пушка: уровень ${weapon.level}`}>
+          {Array.from({ length: PLAYER.maxWeapon }, (_, i) => (
+            <i key={i} className={i < weapon.level ? 'on' : ''} />
           ))}
         </span>
         <span className="hud-coins" aria-label={`Монеты за партию: ${coins}`}>

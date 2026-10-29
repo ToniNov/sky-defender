@@ -10,25 +10,47 @@ export const DIFFICULTY_TIME = 100;
 export const PLAYER = {
   startLives: 3,
   maxLives: 5,
-  maxWeapon: 3,
+  maxWeapon: 3, // уровней у каждого вида оружия
   r: 16, // радиус хитбокса
   keySpeed: 460, // скорость с клавиатуры
   dragFactor: 1.25, // во сколько раз самолёт сдвигается дальше пальца
-  fireInterval: 0.15,
   firstShotDelay: 0.3,
-  bulletSpeed: 760,
   bulletR: 6,
   startInvuln: 1.2, // неуязвимость в начале партии
   hitInvuln: 1.8, // неуязвимость после попадания
   pickupR: 32, // радиус подбора бонусов
 } as const;
 
-/** Узоры выстрела по уровню пушки: [смещение по x, скорость по x]. */
-export const WEAPON_PATTERNS: Record<number, readonly (readonly [number, number])[]> = {
-  1: [[0, 0]],
-  2: [[-9, 0], [9, 0]],
-  3: [[0, 0], [-12, -150], [12, 150]],
-};
+/** Залп: пули [смещение по x, скорость по x]. */
+type Volley = readonly (readonly [number, number])[];
+
+/**
+ * Виды оружия. interval — пауза между залпами (до улучшения скорострельности),
+ * damage — урон одной пули, patterns[n] — залп на уровне n + 1 (их PLAYER.maxWeapon).
+ */
+export const WEAPONS = {
+  gun: {
+    interval: 0.15,
+    damage: 1,
+    bulletSpeed: 760,
+    patterns: [
+      [[0, 0]],
+      [[-9, 0], [9, 0]],
+      [[0, 0], [-12, -150], [12, 150]],
+    ],
+  },
+} as const satisfies Record<string, { interval: number; damage: number; bulletSpeed: number; patterns: readonly Volley[] }>;
+
+export type WeaponKind = keyof typeof WEAPONS;
+export const WEAPON_KINDS = Object.keys(WEAPONS) as WeaponKind[];
+/** С этим видом начинается партия. */
+export const DEFAULT_WEAPON: WeaponKind = 'gun';
+
+/** Оружие игрока: вид и уровень (1…PLAYER.maxWeapon). */
+export interface Weapon {
+  kind: WeaponKind;
+  level: number;
+}
 
 export const ENEMY = {
   scout: {

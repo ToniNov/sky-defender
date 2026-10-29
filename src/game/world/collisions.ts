@@ -19,7 +19,8 @@ export interface Battle {
   readonly shots: Projectiles;
   readonly enemies: Enemies;
   readonly pickups: Pickups;
-  damageEnemy(e: Enemy, x: number, y: number): void;
+  /** Пуля игрока попала во врага в точке (x, y). */
+  damageEnemy(e: Enemy, x: number, y: number, damage: number): void;
   /** Пуля отлетела от щита щитоносца. */
   deflect(x: number, y: number): void;
   destroyEnemy(e: Enemy, byPlayer: boolean): void;
@@ -39,9 +40,10 @@ export function collide(b: Battle) {
     for (const e of enemies.list) {
       if (!near(bullet.s, e.s, bullet.r + e.r)) continue;
       const { x, y } = bullet.s;
+      const { damage } = bullet;
       shots.removeBullet(i);
       if (e.kind === 'shielder' && shieldBlocks({ x, y }, e.s)) b.deflect(x, y);
-      else b.damageEnemy(e, x, y);
+      else b.damageEnemy(e, x, y, damage);
       break;
     }
   }

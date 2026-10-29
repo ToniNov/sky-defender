@@ -1,6 +1,6 @@
 import { Sprite, type Container } from 'pixi.js';
 import { sfx } from '../../audio';
-import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPON_PATTERNS } from '../balance';
+import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS } from '../balance';
 import type { Textures } from '../textures';
 import type { Effects } from './Effects';
 import type { Field } from './Field';
@@ -17,6 +17,9 @@ export interface Bullet {
   vy: number;
   r: number;
 }
+export interface PlayerBullet extends Bullet {
+  damage: number;
+}
 export interface Missile {
   s: Sprite;
   vx: number;
@@ -26,7 +29,7 @@ export interface Missile {
 
 /** Снаряды: пули игрока, пули врагов и самонаводящиеся ракеты босса. */
 export class Projectiles {
-  readonly bullets: Bullet[] = [];
+  readonly bullets: PlayerBullet[] = [];
   readonly enemyBullets: Bullet[] = [];
   readonly missiles: Missile[] = [];
 
@@ -48,15 +51,16 @@ export class Projectiles {
     this.enemyBulletPool = new SpritePool(textures.enemyBullet, fxLayer);
   }
 
-  /** Залп игрока: узор зависит от уровня пушки. */
+  /** Залп игрока: узор, скорость и урон пуль — от вида и уровня оружия. */
   firePlayer() {
     const { x, y, weapon } = this.player;
+    const { patterns, bulletSpeed, damage } = WEAPONS[weapon.kind];
     sfx.shoot();
-    for (const [dx, vx] of WEAPON_PATTERNS[weapon]) {
+    for (const [dx, vx] of patterns[weapon.level - 1]) {
       const s = this.bulletPool.get();
       s.position.set(x + dx, y - 30);
-      s.rotation = Math.atan2(vx, PLAYER.bulletSpeed);
-      this.bullets.push({ s, vx, vy: -PLAYER.bulletSpeed, r: PLAYER.bulletR });
+      s.rotation = Math.atan2(vx, bulletSpeed);
+      this.bullets.push({ s, vx, vy: -bulletSpeed, r: PLAYER.bulletR, damage });
     }
   }
 

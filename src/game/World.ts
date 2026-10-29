@@ -11,6 +11,7 @@ import {
   type PowerUpKind,
   type SkinName,
   type Upgrades,
+  type Weapon,
 } from './balance';
 import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
@@ -27,10 +28,10 @@ import {
   bossDrop,
   comboMultiplier,
   killScore,
+  pickWeapon,
   rollDrop,
   startStats,
   takeHit,
-  upgradeWeapon,
 } from './world/rules';
 import { Waves } from './world/Waves';
 
@@ -57,7 +58,7 @@ export interface Loadout {
 export interface WorldEvents {
   score(n: number): void;
   lives(n: number): void;
-  weapon(n: number): void;
+  weapon(w: Weapon): void;
   /** Множитель очков за врагов (1 — комбо нет). */
   combo(multiplier: number): void;
   hit(): void;
@@ -176,7 +177,7 @@ export class World {
       shots: this.shots,
       enemies: this.enemies,
       pickups: this.pickups,
-      damageEnemy: (e, x, y) => this.damageEnemy(e, x, y),
+      damageEnemy: (e, x, y, damage) => this.damageEnemy(e, x, y, damage),
       deflect: (x, y) => this.deflect(x, y),
       destroyEnemy: (e, byPlayer) => this.destroyEnemy(e, byPlayer),
       damagePlayer: (cause) => this.damagePlayer(cause),
@@ -297,7 +298,7 @@ export class World {
     const hit = takeHit({ lives: p.lives, weapon: p.weapon, shield: p.shield, combo: this.combo });
 
     if (hit.absorbed) {
-      // щит принял удар: жизнь, пушка и комбо остаются
+      // щит принял удар: жизнь, оружие и комбо остаются
       p.setShield(false);
       p.invuln = POWER_UP.shieldBreakInvuln;
       this.fx.setShake(6);
@@ -317,7 +318,7 @@ export class World {
     this.fx.setShake(12);
     sfx.damage();
     this.fx.explode(x, y, DAMAGE_COLOR, 18, 240);
-    if (p.weapon !== hit.weapon) {
+    if (p.weapon.level !== hit.weapon.level) {
       p.weapon = hit.weapon;
       this.ev.weapon(p.weapon);
     }
@@ -343,8 +344,8 @@ export class World {
     sfx.deflect();
   }
 
-  private damageEnemy(e: Enemy, x: number, y: number) {
-    e.hp--;
+  private damageEnemy(e: Enemy, x: number, y: number, damage: number) {
+    e.hp -= damage;
     e.flash = 0.07;
     this.fx.explode(x, y, HIT_SPARK_COLOR, 4, 120);
     this.enemies.drawBar(e);
@@ -414,7 +415,7 @@ export class World {
     this.ev.score(this.score);
     const p = this.player;
     if (kind === 'gun') {
-      p.weapon = upgradeWeapon(p.weapon);
+      p.weapon = pickWeapon(p.weapon, p.weapon.kind);
       this.ev.weapon(p.weapon);
     } else if (kind === 'life') {
       p.lives = addLife(p.lives);
@@ -471,7 +472,7 @@ export class World {
         fireInterval: p.fireInterval,
         wave: this.waves.wave,
         lives: p.lives,
-        weapon: p.weapon,
+        weapon: { ...p.weapon },
         combo: comboMultiplier(this.combo),
         invuln: Math.max(0, p.invuln),
         shield: p.shield,

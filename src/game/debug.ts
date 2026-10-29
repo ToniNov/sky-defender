@@ -29,7 +29,8 @@ export interface DebugSnapshot {
   skin: string;
   wave: number;
   lives: number;
-  weapon: number;
+  /** Оружие: вид (WeaponKind) и уровень. */
+  weapon: { kind: string; level: number };
   combo: number;
   invuln: number;
   shield: boolean;
