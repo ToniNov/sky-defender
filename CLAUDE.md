@@ -24,6 +24,8 @@ npm run test:e2e     # e2e-тесты Playwright (сам поднимает dev-
 npm run api:dev      # API локально, http://localhost:8787 (нужен worker/.dev.vars с BOT_TOKEN)
 npm run api:migrate:local  # миграции D1 локально; api:migrate — в боевую базу
 npm run api:errors   # последние 20 ошибок игроков из боевой базы
+npm run api:stats    # аналитика по дням за 14 дней: запуски, игроки, партии, среднее время и очки
+npm run api:deaths   # где умирают за 7 дней: волна × чем сбит
 npm run api:deploy   # выложить API (вручную, только по явной просьбе)
 ```
 
@@ -45,6 +47,7 @@ src/
   progress.ts      сохранение прогресса (рекорд, монеты, улучшения, скины, задания): JSON с версией и миграциями
   quests.ts        задания: статистика партии, зачисление прогресса, выдача следующего — чистые функции
   daily.ts         ежедневная награда: серия дней — чистые функции
+  analytics.ts     аналитика: запуск игры и итог партии (очки, волна, время, чем сбит) → api.ts; игрок — анонимный id устройства
   errors.ts        сбор ошибок: window.onerror/unhandledrejection → api.ts (раз за сессию, не больше 5); ErrorBoundary.tsx — экран «Что-то пошло не так»
   *.test.ts        тесты логики Vitest рядом с модулем
   game/
@@ -74,6 +77,7 @@ worker/            API на Cloudflare Workers (свой tsconfig.worker.json, �
   src/players.ts     имя для таблицы, проверка присланных очков + тест
   src/share.ts       сообщение «Поделиться результатом» для Bot API savePreparedInlineMessage + тест
   src/referrals.ts   ссылка-приглашение и разбор start_param (ref_<id>) + тест
+  src/events.ts      события аналитики из игры: проверка присланного + тест
   src/errors.ts      отчёты об ошибках из игры: разбор, отпечаток для склейки повторов + тест
   migrations/        SQL-миграции D1 (новая схема — новый файл 000N_*.sql)
   wrangler.toml      конфиг воркера: база D1, ALLOWED_ORIGINS

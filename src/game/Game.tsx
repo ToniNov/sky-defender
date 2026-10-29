@@ -59,7 +59,7 @@ function GameScene({ phase, session, events, loadout, ships }: Props & { ships: 
       coins: (n) => ev().coins(n),
       wave: (n) => ev().wave(n),
       bossDown: (f) => ev().bossDown(f),
-      gameOver: (s) => ev().gameOver(s),
+      gameOver: (s, d) => ev().gameOver(s, d),
     });
   }, [app, ships]);
 

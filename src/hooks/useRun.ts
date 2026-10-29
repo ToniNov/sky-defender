@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { trackRun } from '../analytics';
 import { startRun, submitScore } from '../api';
 import { unlockAudio } from '../audio';
 import type { QuestKind } from '../game/balance';
@@ -122,9 +123,10 @@ export function useRun(store: ProgressStore, phase: Phase, setPhase: (phase: Pha
         runRef.current.wave = n;
         checkQuests();
       },
-      gameOver: (final) => {
+      gameOver: (final, death) => {
         const record = final > store.get().best;
         bank(final);
+        trackRun(final, runRef.current.wave, death);
         setNewRecord(record);
         // Шлём очки партии: сервер проверяет, можно ли их набрать за время с начала партии
         const id = ++submitRef.current;

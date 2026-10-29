@@ -1,10 +1,13 @@
-import { ENEMY, PLAYER } from '../balance';
+import { ENEMY, PLAYER, type EnemyKind } from '../balance';
 import type { Enemies, Enemy } from './Enemies';
 import type { Field } from './Field';
 import type { Pickups } from './Pickups';
 import type { Player } from './Player';
 import type { Projectiles } from './Projectiles';
 import { near, shieldBlocks } from './rules';
+
+/** Что попало в игрока: пуля, ракета босса или враг, который протаранил (его вид). */
+export type HitCause = 'bullet' | 'missile' | EnemyKind;
 
 /**
  * Что нужно столкновениям от мира: сами объекты и реакции на касания.
@@ -20,7 +23,7 @@ export interface Battle {
   /** Пуля отлетела от щита щитоносца. */
   deflect(x: number, y: number): void;
   destroyEnemy(e: Enemy, byPlayer: boolean): void;
-  damagePlayer(): void;
+  damagePlayer(cause: HitCause): void;
   /** Подобрать монету i (до вызова coinsPicked может быть несколько). */
   pickCoin(i: number): void;
   coinsPicked(): void;
@@ -60,7 +63,7 @@ export function collide(b: Battle) {
     for (let i = shots.enemyBullets.length - 1; i >= 0; i--) {
       if (near(shots.enemyBullets[i].s, pos, PLAYER.r + 4)) {
         shots.removeEnemyBullet(i);
-        b.damagePlayer();
+        b.damagePlayer('bullet');
         return;
       }
     }
@@ -69,7 +72,7 @@ export function collide(b: Battle) {
     for (let i = shots.missiles.length - 1; i >= 0; i--) {
       if (near(shots.missiles[i].s, pos, PLAYER.r + ENEMY.mother.homing.r)) {
         shots.destroyMissile(i);
-        b.damagePlayer();
+        b.damagePlayer('missile');
         return;
       }
     }
@@ -78,7 +81,7 @@ export function collide(b: Battle) {
     for (const e of enemies.list) {
       if (near(e.s, pos, e.r * 0.8 + PLAYER.r)) {
         if (e.kind !== 'mother') b.destroyEnemy(e, false);
-        b.damagePlayer();
+        b.damagePlayer(e.kind);
         return;
       }
     }
