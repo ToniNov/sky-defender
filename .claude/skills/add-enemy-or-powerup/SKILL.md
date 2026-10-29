@@ -32,7 +32,7 @@ description: Добавить в игру нового врага или нов�
 1. **Баланс** — `src/game/balance.ts`, `POWER_UP.drops.<kind>`: шанс выпадения. Сумма всех шансов должна остаться меньше 1. Длительность и прочие числа — в `POWER_UP` рядом (`<kind>Time`). Тип `PowerUpKind` выводится сам.
 2. **Текстура** — `src/game/textures.ts`: имя в `TextureName` и рисование в `makeTextures`. Если у игрока видно действие (кольцо, пузырь) — вторая текстура, как `magnetRing`.
 3. **Цвет и подпись** — `POWER_UP_COLOR` (обязательно) и `POWER_UP_LABEL` (если HUD не показывает эффект) в `src/game/World.ts`.
-4. **Эффект** — ветка в подборе бонуса в `World.ts` (`if (kind === 'gun') … else if …`). ⚠️ Последний `else` там — бомба: без своей ветки новый бонус взорвёт экран.
+4. **Эффект** — ветка в подборе бонуса в `World.ts` (`if (kind === 'weapon') … else if …`). ⚠️ Последний `else` там — бомба: без своей ветки новый бонус взорвёт экран.
    - Состояние на игроке (таймер, флаг) — в `src/game/world/Player.ts`: поле, `set<Kind>()`, отсчёт в `update(dt)`, сброс в `hide()` (как `setMagnet(0)`), а время действия с учётом ангара — в `reset()`.
    - Формула (сила, ограничение) — чистой функцией в `rules.ts` с тестом, как `pickWeapon` / `addLife`.
 5. **Улучшение в ангаре (по желанию)** — `UPGRADES` в `balance.ts`, применение в `startStats` (`rules.ts`) + тест, подпись в `UPGRADE_INFO` (`src/screens/HangarScreen.tsx`). Новое поле в сохранении → проверь миграции `progress.ts` и `progress.test.ts`.
