@@ -12,6 +12,7 @@
 | `GET /api/referrals` | `{ link, invited, unclaimed }`: ссылка-приглашение `…?startapp=ref_<id>`, сколько друзей пришло, за скольких награда не забрана |
 | `POST /api/referrals/claim` | `{ claimed }`: отмечает награду забранной; монеты (`REFERRAL.reward` за друга) начисляет игра |
 | `POST /api/errors` | тело `{ message, stack, version, platform }`: ошибка из игры, без подписи. Одинаковые складываются в одну строку со счётчиком, разных хранится не больше 1000 |
+| `POST /api/events` | событие аналитики, без подписи: `{ type: 'launch', device, version, platform }` при запуске или `{ type: 'run', …, score, wave, seconds, cause }` после гибели. `device` — случайный id устройства из игры, не Telegram-id |
 | `POST /api/share` | тело `{ score }` → `{ id }`: сообщение с результатом, подготовленное через Bot API `savePreparedInlineMessage`; игра открывает его в `WebApp.shareMessage(id)` |
 
 ## Локально
@@ -65,3 +66,14 @@ npm run api:errors
 
 Стек — из собранного (сжатого) кода: по версии в отчёте можно собрать ту же версию и найти место.
 Очистить таблицу: `npx wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command "DELETE FROM errors"`.
+
+## Аналитика
+
+Игра шлёт на `POST /api/events` (`src/analytics.ts`) запуск и итог каждой партии: очки, волну, время без пауз и чем сбит (`bullet`, `missile` или вид врага, который протаранил). Партии, брошенные из паузы или закрытием приложения, не попадают. Игрок — случайный id устройства.
+
+```bash
+npm run api:stats    # по дням за 14 дней: запуски, игроки, партии, среднее время, очки, волна
+npm run api:deaths   # за 7 дней: на какой волне и от чего умирают
+```
+
+Перед первым запуском — миграция `npm run api:migrate`, потом `npm run api:deploy`.

@@ -1,11 +1,12 @@
 import { Graphics, type Renderer, type Texture } from 'pixi.js';
 import { SKIN_NAMES, type SkinName } from './balance';
+import type { ShipTextures } from './ships';
 import { skinSvg } from './skins';
 
 /**
  * Вся графика игры рисуется векторно через Graphics и один раз
  * "запекается" в текстуры. Дальше в игре используются только быстрые Sprite.
- * Хотите свои картинки — замените нужный пункт на Assets.load('plane.png').
+ * Корабли, для которых есть нарисованные картинки (ships.ts), берутся из них.
  */
 /** Самолёт игрока в каждом скине: plane_classic, plane_delta… */
 export type PlaneTextureName = `plane_${SkinName}`;
@@ -37,7 +38,7 @@ export type TextureName =
 
 export type Textures = Record<TextureName, Texture>;
 
-export function makeTextures(renderer: Renderer): Textures {
+export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Textures {
   const bake = (draw: (g: Graphics) => void) => {
     const g = new Graphics();
     draw(g);
@@ -228,5 +229,7 @@ export function makeTextures(renderer: Renderer): Textures {
         g.stroke({ width: 2.5, color: 0xff6b6b, alpha: 0.75 });
       }
     }),
+    // Нарисованные корабли поверх векторных
+    ...ships,
   };
 }

@@ -133,6 +133,17 @@ export async function sendErrorReport(report: ErrorReport): Promise<void> {
   await request('/api/errors', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
 }
 
+/** Событие аналитики: запуск игры или конец партии (см. analytics.ts). */
+export type AnalyticsEvent =
+  | { type: 'launch'; device: string; version: string; platform: string }
+  | { type: 'run'; device: string; version: string; platform: string; score: number; wave: number; seconds: number; cause: string };
+
+/** Отправить событие аналитики. Без подписи: игра открывается и вне Telegram, а Telegram-id тут не нужен. */
+export async function sendEvent(event: AnalyticsEvent): Promise<void> {
+  const body = JSON.stringify(event);
+  await request('/api/events', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
+}
+
 // Начало партии и её результат уходят строго по очереди: иначе при быстром «Ещё раз»
 // старт новой партии может обогнать результат прежней, и сервер его не примет
 let queue: Promise<unknown> = Promise.resolve();

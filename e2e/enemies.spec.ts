@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { movePlayer, snapshot, spawnEnemy, startGame } from './helpers.ts';
+import { movePlayer, setCheats, snapshot, spawnEnemy, startGame } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
   await startGame(page);
@@ -14,12 +14,14 @@ test('сплиттер распадается на два осколка', async
 });
 
 test('щитоносец неуязвим для пуль снизу по центру', async ({ page }) => {
+  // появившись посреди потока пуль, он мог бы словить пулю сверху — поэтому стреляем только с чистого поля
+  await setCheats(page, { holdFire: true });
+  await expect.poll(async () => (await snapshot(page)).playerBullets).toBe(0);
   const { player } = await snapshot(page);
   await spawnEnemy(page, 'shielder', player.x, 60);
-  // появившись посреди потока пуль, он может словить пулю сверху — считаем HP после этого
-  await page.waitForTimeout(300);
   const hpOf = async () => (await snapshot(page)).enemies.find((e) => e.kind === 'shielder')?.hp;
   const hp = await hpOf();
+  await setCheats(page, { holdFire: false });
   await page.waitForTimeout(1200); // успевает получить десяток пуль в щит
   expect(await hpOf()).toBe(hp);
 });

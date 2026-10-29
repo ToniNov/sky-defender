@@ -10,8 +10,10 @@
  *   GET  /api/referrals    — { link, invited, unclaimed }: ссылка-приглашение и сколько друзей пришло
  *   POST /api/referrals/claim — { claimed }: за скольких друзей выдать награду (монеты начисляет игра)
  *   POST /api/errors       — { message, stack, version, platform }: ошибка из игры; без подписи
+ *   POST /api/events       — событие аналитики: запуск или итог партии (см. events.ts); без подписи
  */
 import { ERRORS_MAX, errorFingerprint, parseErrorReport } from './errors';
+import { parseEvent } from './events';
 import { type TelegramUser, verifyInitData } from './initData';
 import { displayName, parseScore, plausibleScore } from './players';
 import { inviteLink, parseReferrer } from './referrals';
@@ -222,6 +224,19 @@ async function reportError(request: Request, env: Env): Promise<Response> {
   return json({ ok: true });
 }
 
+/** Событие аналитики — одна строка в events. */
+async function recordEvent(request: Request, env: Env): Promise<Response> {
+  const e = parseEvent(await request.json().catch(() => null));
+  if (!e) return fail('bad-event', 400);
+  const run = e.type === 'run' ? e : null;
+  await env.DB.prepare(
+    'INSERT INTO events (at, type, device, version, platform, score, wave, seconds, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+    .bind(Date.now(), e.type, e.device, e.version, e.platform, run?.score ?? null, run?.wave ?? null, run?.seconds ?? null, run?.cause ?? null)
+    .run();
+  return json({ ok: true });
+}
+
 async function referrals(request: Request, env: Env): Promise<Response> {
   const user = (await authorize(request, env))?.user;
   if (!user) return fail('unauthorized', 401);
@@ -262,6 +277,7 @@ export default {
       else if (route === 'GET /api/leaderboard') response = await leaderboard(request, env);
       else if (route === 'POST /api/run') response = await startRun(request, env);
       else if (route === 'POST /api/errors') response = await reportError(request, env);
+      else if (route === 'POST /api/events') response = await recordEvent(request, env);
       else if (route === 'POST /api/score') response = await submitScore(request, env);
       else if (route === 'POST /api/share') response = await share(request, env);
       else if (route === 'GET /api/referrals') response = await referrals(request, env);

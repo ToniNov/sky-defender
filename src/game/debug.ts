@@ -40,6 +40,8 @@ export interface DebugSnapshot {
   coinsOnField: DebugObject[];
   missiles: DebugObject[];
   enemyBullets: number;
+  /** Пуль игрока на поле. */
+  playerBullets: number;
 }
 
 export interface WorldDebug {
@@ -58,8 +60,8 @@ export interface WorldDebug {
   movePlayer(x: number, y: number): void;
   /** Читы для тестов: игрок не получает урон / не стреляет. Сбрасываются при новой игре. */
   setCheats(cheats: { noDamage?: boolean; holdFire?: boolean }): void;
-  /** Сразу сбить самолёт: партия закончится, как от последнего попадания. */
-  crash(): void;
+  /** Сразу сбить самолёт: партия закончится, как от последнего попадания. cause — чем сбит (HitCause), по умолчанию пулей. */
+  crash(cause?: string): void;
 }
 
 declare global {

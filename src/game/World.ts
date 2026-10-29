@@ -15,7 +15,7 @@ import {
 import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
 import { FORMATIONS, type FormationName } from './waves';
-import { collide, type Battle } from './world/collisions';
+import { collide, type Battle, type HitCause } from './world/collisions';
 import { Effects } from './world/Effects';
 import { bossAttack, Enemies, type Enemy } from './world/Enemies';
 import { Field } from './world/Field';
@@ -69,7 +69,17 @@ export interface WorldEvents {
   wave(n: number): void;
   /** Сбит флагман; flawless — игрок не потерял ни одной жизни, пока тот был на поле. */
   bossDown(flawless: boolean): void;
-  gameOver(score: number): void;
+  gameOver(score: number, death: Death): void;
+}
+
+export type { HitCause };
+
+/** Как кончилась партия — для аналитики. */
+export interface Death {
+  /** Последнее попадание. */
+  cause: HitCause;
+  /** Сколько секунд шла партия (без пауз). */
+  seconds: number;
 }
 
 interface Star {
@@ -141,6 +151,7 @@ export class World {
   private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
   private skin: SkinName = DEFAULT_SKIN;
   private deathTimer = 0;
+  private death: Death = { cause: 'bullet', seconds: 0 };
   private autoSpawn = true; // e2e-тесты выключают случайных врагов
   private cheats = { noDamage: false, holdFire: false }; // тоже только для тестов
 
@@ -168,7 +179,7 @@ export class World {
       damageEnemy: (e, x, y) => this.damageEnemy(e, x, y),
       deflect: (x, y) => this.deflect(x, y),
       destroyEnemy: (e, byPlayer) => this.destroyEnemy(e, byPlayer),
-      damagePlayer: () => this.damagePlayer(),
+      damagePlayer: (cause) => this.damagePlayer(cause),
       pickCoin: (i) => this.pickCoin(i),
       coinsPicked: () => {
         this.ev.coins(this.coinCount);
@@ -253,7 +264,7 @@ export class World {
       if (this.autoSpawn) this.waves.update(dt);
     } else if (this.deathTimer > 0) {
       this.deathTimer -= dt;
-      if (this.deathTimer <= 0) this.ev.gameOver(this.score);
+      if (this.deathTimer <= 0) this.ev.gameOver(this.score, this.death);
     }
 
     this.shots.updateBullets(dt);
@@ -279,7 +290,7 @@ export class World {
 
   // ───────────── игрок ─────────────
 
-  private damagePlayer() {
+  private damagePlayer(cause: HitCause) {
     if (this.cheats.noDamage) return;
     const p = this.player;
     const { x, y } = p;
@@ -316,6 +327,7 @@ export class World {
       return;
     }
     this.field.alive = false;
+    this.death = { cause, seconds: this.field.elapsed };
     p.view.visible = false;
     this.fx.explode(x, y, DEATH_COLOR, 50, 400);
     this.fx.explode(x, y, 0xffffff, 20, 200);
@@ -357,6 +369,7 @@ export class World {
       for (const side of [-1, 1]) {
         const m = this.enemies.spawn('mini');
         m.s.position.set(x + side * 10, y);
+        m.s.scale.x = -side; // картинка осколка — левая половина, правому нужна зеркальная
         m.vx = side * ENEMY.mini.splitVx;
       }
     }
@@ -474,6 +487,7 @@ export class World {
         coinsOnField: this.pickups.coins.map((c) => ({ kind: 'coin', ...pos(c.s) })),
         missiles: this.shots.missiles.map((m) => ({ kind: 'missile', ...pos(m.s) })),
         enemyBullets: this.shots.enemyBullets.length,
+        playerBullets: this.shots.bullets.length,
       }),
       setAutoSpawn: (on) => {
         this.autoSpawn = on;
@@ -501,11 +515,11 @@ export class World {
       },
       spawnMissile: (x, y) => this.shots.spawnMissile(x, y, Math.PI / 2),
       movePlayer: (x, y) => p.moveTo(x, y),
-      crash: () => {
+      crash: (cause = 'bullet') => {
         p.lives = 1;
         p.setShield(false);
         this.cheats.noDamage = false;
-        this.damagePlayer();
+        this.damagePlayer(cause as HitCause);
       },
     };
   }
