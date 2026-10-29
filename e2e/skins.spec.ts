@@ -97,3 +97,13 @@ test('сохранение версии 4 получает классическ�
     skins: { owned: ['classic', 'sunset'], selected: 'sunset' },
   });
 });
+
+test('в ангаре показаны нарисованные модели, а не векторные', async ({ page }) => {
+  await openWithSave(page, {});
+  await openSkins(page);
+  const images = page.locator('img[src*="player-"]');
+  await expect(images).toHaveCount(SKIN_NAMES.length);
+  for (const img of await images.all()) {
+    await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(256);
+  }
+});

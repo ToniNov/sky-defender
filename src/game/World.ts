@@ -357,6 +357,7 @@ export class World {
       for (const side of [-1, 1]) {
         const m = this.enemies.spawn('mini');
         m.s.position.set(x + side * 10, y);
+        m.s.scale.x = -side; // картинка осколка — левая половина, правому нужна зеркальная
         m.vx = side * ENEMY.mini.splitVx;
       }
     }

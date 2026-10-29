@@ -1,6 +1,6 @@
 import { version } from '../../package.json';
 import type { SkinName } from '../game/balance';
-import { skinImage } from '../game/skins';
+import { skinImage } from '../game/ships';
 import type { Overlay } from '../hooks/types';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Screen } from '../ui/Screen';

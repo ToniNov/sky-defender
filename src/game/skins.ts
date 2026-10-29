@@ -5,7 +5,7 @@ import type { SkinName } from './balance';
  * Одна и та же строка запекается в текстуру Pixi (textures.ts) и показывается в меню и ангаре (<img>).
  * Парсер Pixi понимает polygon, path, rect (с rx), circle, ellipse, fill и fill-opacity — другим не пользоваться.
  * В points у polygon — только целые числа: Pixi читает их как /-?\d+/, и 43.5 превращается в «43, 5».
- * Нарисованные картинки, когда появятся, заменят нужный пункт: src/assets/ + Assets.load.
+ * Это запасной вариант: если есть нарисованная картинка (src/assets/ships/, см. ships.ts), показывается она.
  */
 
 interface Palette {
@@ -111,6 +111,3 @@ const SHAPES: Record<SkinName, string> = {
 /** Полный SVG скина. */
 export const skinSvg = (name: SkinName) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">${SHAPES[name]}</svg>`;
-
-/** Тот же SVG как адрес картинки — для <img> в интерфейсе. */
-export const skinImage = (name: SkinName) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(skinSvg(name))}`;

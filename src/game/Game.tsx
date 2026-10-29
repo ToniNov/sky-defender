@@ -1,6 +1,7 @@
 import { extend, useApplication, useTick } from '@pixi/react';
 import { Container, type Ticker } from 'pixi.js';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { loadShipTextures, type ShipTextures } from './ships';
 import { makeTextures } from './textures';
 import { World, type Loadout, type WorldEvents } from './World';
 
@@ -20,14 +21,19 @@ interface Props {
 /**
  * В dev-режиме StrictMode создаёт Pixi-приложение дважды, и первое уничтожается
  * без рендерера — сцену строим только для живого приложения.
+ * Сначала ждём картинки кораблей: без них мир построится на векторных.
  */
 export function Game(props: Props) {
   const { app } = useApplication();
-  return app.renderer ? <GameScene {...props} /> : null;
+  const [ships, setShips] = useState<ShipTextures | null>(null);
+  useEffect(() => {
+    loadShipTextures().then(setShips, () => setShips({}));
+  }, []);
+  return app.renderer && ships ? <GameScene {...props} ships={ships} /> : null;
 }
 
 /** Мост между React и игровым миром: создаёт World, кормит его тиками и вводом. */
-function GameScene({ phase, session, events, loadout }: Props) {
+function GameScene({ phase, session, events, loadout, ships }: Props & { ships: ShipTextures }) {
   const { app } = useApplication();
   const containerRef = useRef<Container>(null);
   const phaseRef = useRef(phase);
@@ -42,7 +48,7 @@ function GameScene({ phase, session, events, loadout }: Props) {
 
   const world = useMemo(() => {
     const ev = () => eventsRef.current;
-    return new World(makeTextures(app.renderer), {
+    return new World(makeTextures(app.renderer, ships), {
       score: (n) => ev().score(n),
       lives: (n) => ev().lives(n),
       weapon: (n) => ev().weapon(n),
@@ -55,7 +61,7 @@ function GameScene({ phase, session, events, loadout }: Props) {
       bossDown: (f) => ev().bossDown(f),
       gameOver: (s) => ev().gameOver(s),
     });
-  }, [app]);
+  }, [app, ships]);
 
   // В dev-сборке мир доступен e2e-тестам как window.__world (см. debug.ts)
   useEffect(() => {

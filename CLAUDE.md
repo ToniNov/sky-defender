@@ -64,7 +64,8 @@ src/
     balance.ts     числа баланса: скорости, HP, очки, интервалы, шансы, темп волн
     waves.ts       состав волн: какие построения бывают, с какой волны, как часто; план волны
     textures.ts    векторная графика (Graphics), запекается в текстуры при старте
-    skins.ts       скины самолёта как SVG-строки: одна строка и для Pixi, и для <img> в интерфейсе
+    skins.ts       скины самолёта как SVG-строки — запасной вариант, если нет картинки
+    ships.ts       нарисованные корабли src/assets/ships/*.png: загрузка через Assets.load, размер на экране, картинка скина для <img>
     debug.ts       типы отладочного API `window.__world` для e2e-тестов (только dev)
 e2e/               тесты Playwright: helpers.ts + spec-файлы по темам
 worker/            API на Cloudflare Workers (свой tsconfig.worker.json, типы Workers); настройка — worker/README.md

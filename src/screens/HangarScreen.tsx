@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { SKIN_NAMES, SKINS, UPGRADE_NAMES, UPGRADES, upgradeMax, type SkinName, type UpgradeName } from '../game/balance';
-import { skinImage } from '../game/skins';
+import { skinImage } from '../game/ships';
 import type { Progress } from '../progress';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Screen } from '../ui/Screen';
