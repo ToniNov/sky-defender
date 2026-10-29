@@ -6,6 +6,9 @@ import type { Player } from './Player';
 import type { Projectiles } from './Projectiles';
 import { beamTop, inBeam, near, shieldBlocks } from './rules';
 
+/** Чем игрок сбил врага: оружием или бомбой. */
+export type Killer = WeaponKind | 'bomb';
+
 /** Что попало в игрока: пуля, ракета босса или враг, который протаранил (его вид). */
 export type HitCause = 'bullet' | 'missile' | EnemyKind;
 
@@ -23,7 +26,8 @@ export interface Battle {
   damageEnemy(e: Enemy, x: number, y: number, damage: number, kind: WeaponKind): void;
   /** Пуля отлетела от щита щитоносца. */
   deflect(x: number, y: number): void;
-  destroyEnemy(e: Enemy, byPlayer: boolean): void;
+  /** by — чем сбил игрок; null — враг разбился о самолёт. */
+  destroyEnemy(e: Enemy, by: Killer | null): void;
   damagePlayer(cause: HitCause): void;
   /** Подобрать монету i (до вызова coinsPicked может быть несколько). */
   pickCoin(i: number): void;
@@ -90,7 +94,7 @@ export function collide(b: Battle) {
     // таран (босс от тарана не погибает)
     for (const e of enemies.list) {
       if (near(e.s, pos, e.r * 0.8 + PLAYER.r)) {
-        if (e.kind !== 'mother') b.destroyEnemy(e, false);
+        if (e.kind !== 'mother') b.destroyEnemy(e, null);
         b.damagePlayer(e.kind);
         return;
       }

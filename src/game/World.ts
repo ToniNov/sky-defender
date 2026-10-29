@@ -20,7 +20,7 @@ import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
 import { WEAPON_LOOK } from './weaponLook';
 import { FORMATIONS, type FormationName } from './waves';
-import { collide, type Battle, type HitCause } from './world/collisions';
+import { collide, type Battle, type HitCause, type Killer } from './world/collisions';
 import { Effects } from './world/Effects';
 import { bossAttack, Enemies, type Enemy } from './world/Enemies';
 import { Field } from './world/Field';
@@ -67,7 +67,8 @@ export interface WorldEvents {
   /** Множитель очков за врагов (1 — комбо нет). */
   combo(multiplier: number): void;
   hit(): void;
-  kill(kind: EnemyKind): void;
+  /** Игрок сбил врага kind оружием или бомбой (by). */
+  kill(kind: EnemyKind, by: Killer): void;
   powerUp(): void;
   /** Монет собрано за партию. */
   coins(n: number): void;
@@ -78,7 +79,7 @@ export interface WorldEvents {
   gameOver(score: number, death: Death): void;
 }
 
-export type { HitCause };
+export type { HitCause, Killer };
 
 /** Как кончилась партия — для аналитики. */
 export interface Death {
@@ -191,7 +192,7 @@ export class World {
       pickups: this.pickups,
       damageEnemy: (e, x, y, damage, kind) => this.damageEnemy(e, x, y, damage, kind),
       deflect: (x, y) => this.deflect(x, y),
-      destroyEnemy: (e, byPlayer) => this.destroyEnemy(e, byPlayer),
+      destroyEnemy: (e, by) => this.destroyEnemy(e, by),
       damagePlayer: (cause) => this.damagePlayer(cause),
       pickCoin: (i) => this.pickCoin(i),
       coinsPicked: () => {
@@ -365,11 +366,11 @@ export class World {
     if (kind === 'rocket') sfx.rocketHit();
     this.enemies.drawBar(e);
     if (e.hp > 0) sfx.hit();
-    else this.destroyEnemy(e, true);
+    else this.destroyEnemy(e, kind);
   }
 
-  /** Враг уничтожен; byPlayer — сбит игроком (очки, комбо, добыча), а не разбился о него. */
-  private destroyEnemy(e: Enemy, byPlayer: boolean) {
+  /** Враг уничтожен; by — чем сбил игрок (очки, комбо, добыча), null — разбился о самолёт. */
+  private destroyEnemy(e: Enemy, by: Killer | null) {
     if (!this.enemies.list.includes(e)) return;
     const { x, y } = e.s; // до remove: потом спрайт уничтожен
     const color = ENEMY_COLOR[e.kind];
@@ -380,7 +381,7 @@ export class World {
     sfx.explosion(big);
     this.enemies.remove(e);
 
-    if (!byPlayer) return;
+    if (!by) return;
     if (e.kind === 'splitter') {
       for (const side of [-1, 1]) {
         const m = this.enemies.spawn('mini');
@@ -395,7 +396,7 @@ export class World {
     if (kill.multiplierChanged) this.ev.combo(kill.multiplier);
     this.score += kill.points;
     this.ev.score(this.score);
-    this.ev.kill(e.kind);
+    this.ev.kill(e.kind, by);
     if (big) this.ev.bossDown(e.flawless);
     this.fx.popup(x, y - e.r, `+${kill.points}`, color);
 
@@ -458,13 +459,13 @@ export class World {
         e.hp -= POWER_UP.bombBossDamage;
         e.flash = 0.2;
         this.enemies.drawBar(e);
-        if (e.hp <= 0) this.destroyEnemy(e, true);
+        if (e.hp <= 0) this.destroyEnemy(e, 'bomb');
       } else {
-        this.destroyEnemy(e, true);
+        this.destroyEnemy(e, 'bomb');
       }
     }
     // осколки сплиттеров, появившиеся от взрыва
-    for (const e of [...this.enemies.list]) if (e.kind === 'mini') this.destroyEnemy(e, true);
+    for (const e of [...this.enemies.list]) if (e.kind === 'mini') this.destroyEnemy(e, 'bomb');
     this.shots.clearEnemyFire();
     this.fx.flashBomb();
     this.fx.shakeAtLeast(BOMB_SHAKE);

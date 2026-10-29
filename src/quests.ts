@@ -1,4 +1,4 @@
-import { QUEST_KINDS, QUESTS, type EnemyKind, type QuestKind } from './game/balance';
+import { QUEST_KINDS, QUESTS, type EnemyKind, type QuestKind, type WeaponKind } from './game/balance';
 
 /**
  * Задания: чистые функции без React и хранилища.
@@ -22,6 +22,10 @@ export interface Quests {
 /** Статистика текущей партии. */
 export interface RunStats {
   kills: Partial<Record<EnemyKind, number>>;
+  /** Сбито каждым видом оружия (бомба не в счёт). */
+  weaponKills: Partial<Record<WeaponKind, number>>;
+  /** Флагманов, добитых каждым видом оружия. */
+  weaponBosses: Partial<Record<WeaponKind, number>>;
   flawlessBosses: number;
   coins: number;
   powerUps: number;
@@ -30,7 +34,33 @@ export interface RunStats {
   combo: number;
 }
 
-export const emptyRunStats = (): RunStats => ({ kills: {}, flawlessBosses: 0, coins: 0, powerUps: 0, wave: 0, score: 0, combo: 1 });
+export const emptyRunStats = (): RunStats => ({
+  kills: {},
+  weaponKills: {},
+  weaponBosses: {},
+  flawlessBosses: 0,
+  coins: 0,
+  powerUps: 0,
+  wave: 0,
+  score: 0,
+  combo: 1,
+});
+
+/** Копия статистики (со вложенными счётчиками) — запомнить, что уже зачислено. */
+export const copyRunStats = (r: RunStats): RunStats => ({
+  ...r,
+  kills: { ...r.kills },
+  weaponKills: { ...r.weaponKills },
+  weaponBosses: { ...r.weaponBosses },
+});
+
+/** Игрок сбил врага kind оружием или бомбой (by) — дописать в статистику партии. */
+export function countKill(r: RunStats, kind: EnemyKind, by: WeaponKind | 'bomb') {
+  r.kills[kind] = (r.kills[kind] ?? 0) + 1;
+  if (by === 'bomb') return;
+  r.weaponKills[by] = (r.weaponKills[by] ?? 0) + 1;
+  if (kind === 'mother') r.weaponBosses[by] = (r.weaponBosses[by] ?? 0) + 1;
+}
 
 /** sum — копится между партиями, best — лучший результат за одну партию. */
 const STAT: Record<QuestKind, { mode: 'sum' | 'best'; value: (r: RunStats) => number }> = {
@@ -46,6 +76,11 @@ const STAT: Record<QuestKind, { mode: 'sum' | 'best'; value: (r: RunStats) => nu
   wave: { mode: 'best', value: (r) => r.wave },
   score: { mode: 'best', value: (r) => r.score },
   combo: { mode: 'best', value: (r) => r.combo },
+  spreadKills: { mode: 'sum', value: (r) => r.weaponKills.spread ?? 0 },
+  pierceKills: { mode: 'sum', value: (r) => r.weaponKills.pierce ?? 0 },
+  laserKills: { mode: 'sum', value: (r) => r.weaponKills.laser ?? 0 },
+  rocketKills: { mode: 'sum', value: (r) => r.weaponKills.rocket ?? 0 },
+  rocketBoss: { mode: 'sum', value: (r) => r.weaponBosses.rocket ?? 0 },
 };
 
 export function questTarget(q: Pick<Quest, 'kind' | 'tier'>) {

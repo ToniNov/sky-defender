@@ -323,6 +323,12 @@ export const QUESTS = {
     wave: { target: 5, targetStep: 2, reward: 30, rewardStep: 15 }, // за одну партию
     score: { target: 1500, targetStep: 1500, reward: 30, rewardStep: 15 }, // за одну партию
     combo: { target: 3, targetStep: 1, max: 5, reward: 25, rewardStep: 15 }, // за одну партию, не больше COMBO.maxMultiplier
+    // сбить врагов определённым оружием (за всё время); в бою его даёт капсула, покупать не обязательно
+    spreadKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    pierceKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    laserKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    rocketKills: { target: 20, targetStep: 15, reward: 35, rewardStep: 10 },
+    rocketBoss: { target: 1, targetStep: 1, reward: 50, rewardStep: 25 }, // добить флагмана ракетой
   },
 } as const;
 

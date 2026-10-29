@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { QUESTS } from './game/balance';
+import { QUEST_KINDS, QUESTS } from './game/balance';
 import {
   applyRun,
   claimQuest,
+  copyRunStats,
+  countKill,
   emptyRunStats,
   fillQuests,
   questComplete,
@@ -15,6 +17,33 @@ import {
 
 const run = (patch: Partial<RunStats>): RunStats => ({ ...emptyRunStats(), ...patch });
 const withActive = (...active: Quest[]): Quests => ({ active, done: {} });
+
+describe('countKill', () => {
+  it('считает врага, вид оружия и флагмана, добитого этим видом', () => {
+    const r = emptyRunStats();
+    countKill(r, 'scout', 'laser');
+    countKill(r, 'mother', 'rocket');
+    expect(r.kills).toEqual({ scout: 1, mother: 1 });
+    expect(r.weaponKills).toEqual({ laser: 1, rocket: 1 });
+    expect(r.weaponBosses).toEqual({ rocket: 1 });
+  });
+
+  it('бомба засчитывает врага, но не оружие', () => {
+    const r = emptyRunStats();
+    countKill(r, 'mother', 'bomb');
+    expect(r.kills).toEqual({ mother: 1 });
+    expect(r.weaponKills).toEqual({});
+    expect(r.weaponBosses).toEqual({});
+  });
+
+  it('копия не меняется вместе с партией', () => {
+    const r = emptyRunStats();
+    const banked = copyRunStats(r);
+    countKill(r, 'scout', 'spread');
+    expect(banked.kills).toEqual({});
+    expect(banked.weaponKills).toEqual({});
+  });
+});
 
 describe('цель и награда', () => {
   it('растут с каждым повторением задания', () => {
@@ -53,6 +82,14 @@ describe('applyRun', () => {
     expect(questComplete(q)).toBe(true);
   });
 
+  it('задание на оружие считает только врагов, сбитых этим оружием', () => {
+    const quests = withActive({ kind: 'laserKills', tier: 0, progress: 0 }, { kind: 'rocketBoss', tier: 0, progress: 0 });
+    const now = run({ weaponKills: { laser: 4, gun: 10 }, weaponBosses: { laser: 1 } });
+    const [laser, rocketBoss] = applyRun(quests, now, emptyRunStats()).active;
+    expect(laser.progress).toBe(4);
+    expect(rocketBoss.progress).toBe(0);
+  });
+
   it('осколки сплиттера не засчитываются как сплиттеры', () => {
     const quests = withActive({ kind: 'splitter', tier: 0, progress: 0 });
     expect(applyRun(quests, run({ kills: { mini: 10 } }), emptyRunStats()).active[0].progress).toBe(0);
@@ -67,6 +104,12 @@ describe('applyRun', () => {
 });
 
 describe('выдача заданий', () => {
+  it('новые типы, которые ещё не выполнялись, выдаются раньше знакомых', () => {
+    const done = Object.fromEntries(QUEST_KINDS.filter((k) => k !== 'laserKills').map((k) => [k, 3]));
+    const { active } = fillQuests({ active: [{ kind: 'scout', tier: 3, progress: 0 }], done });
+    expect(active[1].kind).toBe('laserKills');
+  });
+
   it('новичок получает первые типы по порядку', () => {
     const { active } = fillQuests({ active: [], done: {} });
     expect(active.map((q) => q.kind)).toEqual(['scout', 'saucer', 'kamikaze']);
@@ -76,7 +119,8 @@ describe('выдача заданий', () => {
   it('добавляет тип, который выполнялся реже всего, и не повторяет активные', () => {
     const { active } = fillQuests({
       active: [{ kind: 'scout', tier: 0, progress: 0 }],
-      done: { saucer: 2, kamikaze: 1, shielder: 1, splitter: 1, boss: 1, flawlessBoss: 1, coins: 1, powerUps: 1, wave: 1, score: 1, combo: 1 },
+      // все типы выполнены по разу, тарелка — дважды
+      done: { ...Object.fromEntries(QUEST_KINDS.map((k) => [k, 1])), saucer: 2 },
     });
     expect(active.map((q) => q.kind)).toEqual(['scout', 'kamikaze', 'shielder']);
     expect(active[1].tier).toBe(1);
