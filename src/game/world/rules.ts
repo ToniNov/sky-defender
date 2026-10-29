@@ -135,6 +135,20 @@ export const bossHp = (elapsed: number) =>
 export const shieldBlocks = (bullet: Point, shielder: Point) =>
   bullet.y > shielder.y && Math.abs(bullet.x - shielder.x) < ENEMY.shielder.plateHalf;
 
+/** Ближайшая к p цель; null, если целей нет. Ракеты игрока доворачивают на неё. */
+export function nearest<T extends Point>(p: Point, targets: readonly T[]): T | null {
+  let best: T | null = null;
+  let bestD = Infinity;
+  for (const t of targets) {
+    const d = (t.x - p.x) ** 2 + (t.y - p.y) ** 2;
+    if (d < bestD) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 /** Повернуть угол к цели, но не больше чем на maxTurn — так от самонаводящегося снаряда можно увернуться. */
 export function turnToward(angle: number, target: number, maxTurn: number) {
   const diff = Math.atan2(Math.sin(target - angle), Math.cos(target - angle)); // кратчайший поворот, −π…π

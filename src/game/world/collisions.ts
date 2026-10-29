@@ -40,9 +40,10 @@ export function collide(b: Battle) {
     for (const e of enemies.list) {
       if (!near(bullet.s, e.s, bullet.r + e.r)) continue;
       const { x, y } = bullet.s;
-      const { damage } = bullet;
+      const { damage, homing } = bullet;
       shots.removeBullet(i);
-      if (e.kind === 'shielder' && shieldBlocks({ x, y }, e.s)) b.deflect(x, y);
+      // ракета заходит сбоку — щит её не держит
+      if (e.kind === 'shielder' && !homing && shieldBlocks({ x, y }, e.s)) b.deflect(x, y);
       else b.damageEnemy(e, x, y, damage);
       break;
     }

@@ -1,4 +1,4 @@
-import { Sprite, type Container } from 'pixi.js';
+import { Sprite, type Container, type Texture } from 'pixi.js';
 import { sfx } from '../../audio';
 import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS } from '../balance';
 import type { Textures } from '../textures';
@@ -6,7 +6,7 @@ import type { Effects } from './Effects';
 import type { Field } from './Field';
 import type { Player } from './Player';
 import { releaseAll, releaseAt, removeAt, SpritePool } from './pool';
-import { turnToward, type Beam } from './rules';
+import { nearest, turnToward, type Beam, type Point } from './rules';
 
 const MISSILE_COLOR = 0x7fffd4;
 const BOMB_BULLET_COLOR = 0xff3d6e; // искры от вражеских пуль, стёртых бомбой
@@ -23,6 +23,8 @@ export interface Bullet {
 }
 export interface PlayerBullet extends Bullet {
   damage: number;
+  /** Ракета: доворот на ближайшего врага, рад/с. 0 — обычная пуля, летит прямо. Щит щитоносца ракету не держит. */
+  homing: number;
 }
 export interface Missile {
   s: Sprite;
@@ -42,6 +44,8 @@ export class Projectiles {
   readonly missiles: Missile[] = [];
 
   private bulletPool: SpritePool;
+  /** Ракеты вылетают то вправо, то влево: залп зеркалится через раз. */
+  private rocketSide = 1;
   private enemyBulletPool: SpritePool;
   private tx: Textures;
   private missileLayer: Container;
@@ -72,14 +76,28 @@ export class Projectiles {
       this.beamDamage += spec.beam[weapon.level - 1].dps * spec.interval;
       return;
     }
-    const { patterns, bulletSpeed, damage } = spec;
     sfx.shoot();
-    for (const [dx, vx] of patterns[weapon.level - 1]) {
-      const s = this.bulletPool.get();
-      s.position.set(x + dx, y - 30);
-      s.rotation = Math.atan2(vx, bulletSpeed);
-      this.bullets.push({ s, vx, vy: -bulletSpeed, r: PLAYER.bulletR, damage });
+    if ('volleys' in spec) {
+      const { volleys, speed, damage, turnRate } = spec;
+      const side = (this.rocketSide = -this.rocketSide);
+      for (const [dx, angle] of volleys[weapon.level - 1]) {
+        const a = angle * side;
+        this.addBullet(this.tx.rocket, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, damage, turnRate);
+      }
+      return;
     }
+    const { patterns, bulletSpeed, damage } = spec;
+    for (const [dx, vx] of patterns[weapon.level - 1]) {
+      this.addBullet(this.tx.bullet, x + dx, y - 30, vx, -bulletSpeed, damage, 0);
+    }
+  }
+
+  private addBullet(texture: Texture, x: number, y: number, vx: number, vy: number, damage: number, homing: number) {
+    const s = this.bulletPool.get();
+    s.texture = texture; // в пуле и пули, и ракеты
+    s.position.set(x, y);
+    s.rotation = Math.atan2(vx, -vy);
+    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing });
   }
 
   /** Вражеский выстрел в игрока (со смещением угла); если игрока нет — вниз. */
@@ -155,12 +173,24 @@ export class Projectiles {
     while (this.missiles.length) this.destroyMissile(this.missiles.length - 1);
   }
 
-  updateBullets(dt: number) {
+  /** Пули летят прямо, ракеты доворачивают на ближайшую из targets (без целей — вверх). */
+  updateBullets(dt: number, targets: readonly Point[]) {
+    const { w, h } = this.field;
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      if (b.homing > 0) {
+        const target = nearest(b.s, targets);
+        const goal = target ? Math.atan2(target.y - b.s.y, target.x - b.s.x) : -Math.PI / 2;
+        const angle = turnToward(Math.atan2(b.vy, b.vx), goal, b.homing * dt);
+        const speed = Math.hypot(b.vx, b.vy);
+        b.vx = Math.cos(angle) * speed;
+        b.vy = Math.sin(angle) * speed;
+        b.s.rotation = angle + Math.PI / 2;
+      }
       b.s.x += b.vx * dt;
       b.s.y += b.vy * dt;
-      if (b.s.y < -30) this.removeBullet(i);
+      const { x, y } = b.s;
+      if (y < -30 || y > h + 30 || x < -30 || x > w + 30) this.removeBullet(i);
     }
   }
 

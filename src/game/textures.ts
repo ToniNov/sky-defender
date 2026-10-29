@@ -17,6 +17,7 @@ export const WEAPON_LOOK: Record<WeaponKind, { color: number; letter: string; la
   gun: { color: 0xffd23f, letter: 'П', label: 'ПУШКА' },
   spread: { color: 0x6ff2c0, letter: 'В', label: 'ВЕЕР' },
   laser: { color: 0xff5c8a, letter: 'Л', label: 'ЛАЗЕР' },
+  rocket: { color: 0xff9a3c, letter: 'Р', label: 'РАКЕТЫ' },
 };
 const CAPSULE_LETTER_COLOR = 0x1a1030;
 
@@ -30,6 +31,7 @@ export type TextureName =
   | 'flame'
   | 'bullet'
   | 'beam'
+  | 'rocket'
   | 'enemyBullet'
   | 'missile'
   | 'scout'
@@ -99,6 +101,15 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     bullet: bake((g) => {
       g.roundRect(0, 0, 6, 18, 3).fill(0xffd23f);
       g.roundRect(1.5, 2, 3, 13, 1.5).fill(0xffffff);
+    }),
+
+    // Ракета игрока (носом вверх) с огоньком сзади
+    rocket: bake((g) => {
+      const { color } = WEAPON_LOOK.rocket;
+      g.poly([5, 18, 7, 24, 9, 18]).fill(0xffe066);
+      g.poly([1, 18, 3, 13, 11, 13, 13, 18]).fill(color);
+      g.roundRect(4, 4, 6, 15, 2).fill(0xf2f2f2);
+      g.poly([4, 5, 7, 0, 10, 5]).fill(color);
     }),
 
     // Луч лазера в разрезе: свечение, луч, белая сердцевина. Растягивается по высоте

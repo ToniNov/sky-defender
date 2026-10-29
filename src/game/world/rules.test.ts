@@ -13,6 +13,7 @@ import {
   killScore,
   loseWeaponLevel,
   near,
+  nearest,
   nextWeaponKind,
   pickWeapon,
   rollDrop,
@@ -93,13 +94,26 @@ describe('оружие', () => {
   it('у каждого вида залп или луч на каждый уровень', () => {
     for (const kind of WEAPON_KINDS) {
       const spec = WEAPONS[kind];
-      expect('beam' in spec ? spec.beam : spec.patterns).toHaveLength(PLAYER.maxWeapon);
+      const levels = 'beam' in spec ? spec.beam : 'volleys' in spec ? spec.volleys : spec.patterns;
+      expect(levels).toHaveLength(PLAYER.maxWeapon);
     }
   });
 
   it('пауза между залпами — от вида и скорострельности', () => {
     expect(fireInterval(gun(1), 1)).toBe(WEAPONS.gun.interval);
     expect(fireInterval(gun(3), 0.8)).toBeCloseTo(WEAPONS.gun.interval * 0.8);
+  });
+});
+
+describe('цель ракеты', () => {
+  it('ближайшая к ракете', () => {
+    const far = { x: 0, y: 0 };
+    const close = { x: 90, y: 110 };
+    expect(nearest({ x: 100, y: 100 }, [far, close])).toBe(close);
+  });
+
+  it('без целей — null', () => {
+    expect(nearest({ x: 0, y: 0 }, [])).toBeNull();
   });
 });
 

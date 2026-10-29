@@ -271,7 +271,7 @@ export class World {
     }
     this.shots.updateBeam(this.field.alive && !this.cheats.holdFire);
 
-    this.shots.updateBullets(dt);
+    this.shots.updateBullets(dt, this.enemies.list.map((e) => e.s));
     this.enemies.update(dt);
     this.shots.updateEnemyFire(dt);
     this.pickups.update(dt);

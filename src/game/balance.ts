@@ -31,6 +31,14 @@ interface VolleySpec {
   bulletSpeed: number;
   patterns: readonly Volley[];
 }
+/** Ракеты: летят по дуге и доворачивают на ближайшего врага; volleys[n] — залп на уровне n + 1. */
+interface RocketSpec {
+  interval: number; // пауза между залпами (до улучшения скорострельности)
+  damage: number;
+  speed: number;
+  turnRate: number; // доворот на цель, рад/с
+  volleys: readonly Volley[]; // ракеты [смещение по x, угол вылета от вертикали, рад]; каждый залп зеркалится
+}
 /** Луч: бьёт всех на линии вверх от самолёта раз в interval; beam[n] — уровень n + 1. */
 interface BeamSpec {
   interval: number; // тик урона (улучшение скорострельности делает его чаще)
@@ -70,7 +78,20 @@ export const WEAPONS = {
       { dps: 12, width: 24 },
     ],
   },
-} as const satisfies Record<string, VolleySpec | BeamSpec>;
+  // ракеты: медленные и редкие, но сильные; вылетают в стороны и заходят на цель сбоку —
+  // щит щитоносца их не держит
+  rocket: {
+    interval: 0.6,
+    damage: 3,
+    speed: 380,
+    turnRate: 4.5,
+    volleys: [
+      [[14, 0.8]],
+      [[-14, -0.8], [14, 0.8]],
+      [[-14, -0.6], [14, 0.6], [-20, -1.2], [20, 1.2]],
+    ],
+  },
+} as const satisfies Record<string, VolleySpec | BeamSpec | RocketSpec>;
 
 export type WeaponKind = keyof typeof WEAPONS;
 export const WEAPON_KINDS = Object.keys(WEAPONS) as WeaponKind[];
