@@ -74,6 +74,7 @@ npm run api:errors
 ```bash
 npm run api:stats    # по дням за 14 дней: запуски, игроки, партии, среднее время, очки, волна
 npm run api:deaths   # за 7 дней: на какой волне и от чего умирают
+npm run api:weapons  # за 7 дней: с каким оружием живут дольше (основное × стартовое)
 ```
 
 Перед первым запуском — миграция `npm run api:migrate`, потом `npm run api:deploy`.

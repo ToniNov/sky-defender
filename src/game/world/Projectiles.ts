@@ -1,21 +1,55 @@
-import { Sprite, type Container } from 'pixi.js';
+import { Sprite, type Container, type Texture } from 'pixi.js';
 import { sfx } from '../../audio';
-import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPON_PATTERNS } from '../balance';
-import type { Textures } from '../textures';
+import { ENEMY, ENEMY_BULLET_R, PLAYER, WEAPONS, type WeaponKind } from '../balance';
+import type { TextureName, Textures } from '../textures';
+import { WEAPON_LOOK } from '../weaponLook';
 import type { Effects } from './Effects';
 import type { Field } from './Field';
 import type { Player } from './Player';
 import { releaseAll, releaseAt, removeAt, SpritePool } from './pool';
-import { turnToward } from './rules';
+import { nearest, turnToward, type Beam, type Point } from './rules';
 
 const MISSILE_COLOR = 0x7fffd4;
 const BOMB_BULLET_COLOR = 0xff3d6e; // искры от вражеских пуль, стёртых бомбой
+const BEAM_FLICKER = 0.15; // луч дрожит по ширине на столько
+const BEAM_GLOW = 2; // свечение шире луча, которым бьёт лазер, во столько раз
+const BEAM_FROM_NOSE = 28; // луч начинается от носа самолёта
+const BEAM_OFF_SCREEN = -40; // без препятствий луч уходит за верх экрана
+/** Чем стреляет каждый вид (у лазера — луч). */
+const SHOT_TEXTURE: Record<WeaponKind, TextureName> = {
+  gun: 'bullet',
+  spread: 'pellet',
+  laser: 'beam',
+  pierce: 'needle',
+  rocket: 'rocket',
+};
+/** Звук залпа каждого вида; у лазера — гул на каждый тик урона. */
+const SHOT_SOUND: Record<WeaponKind, () => void> = {
+  gun: sfx.shoot,
+  spread: sfx.shootSpread,
+  laser: sfx.laser,
+  pierce: sfx.shootPierce,
+  rocket: sfx.shootRocket,
+};
+const ROCKET_TRAIL_CHANCE = 0.6; // дымный след: искра за ракетой в кадр с такой вероятностью
+const ROCKET_TRAIL_SPEED = 30;
 
 export interface Bullet {
   s: Sprite;
   vx: number;
   vy: number;
   r: number;
+}
+export interface PlayerBullet extends Bullet {
+  damage: number;
+  /** Ракета: доворот на ближайшего врага, рад/с. 0 — обычная пуля, летит прямо. Щит щитоносца ракету не держит. */
+  homing: number;
+  /** Сколько ещё врагов пуля пробьёт насквозь; 0 — пропадает при попадании. */
+  pierce: number;
+  /** Кого пуля уже задела — второй раз того же врага не бьёт. */
+  hit: object[];
+  /** Из какого оружия: от него искры и звук попадания. */
+  kind: WeaponKind;
 }
 export interface Missile {
   s: Sprite;
@@ -24,19 +58,26 @@ export interface Missile {
   homing: number; // сколько ещё доворачивает на игрока
 }
 
-/** Снаряды: пули игрока, пули врагов и самонаводящиеся ракеты босса. */
+/** Снаряды: пули и луч игрока, пули врагов и самонаводящиеся ракеты босса. */
 export class Projectiles {
-  readonly bullets: Bullet[] = [];
+  readonly bullets: PlayerBullet[] = [];
+  /** Луч лазера, пока он включён; top обновляют столкновения (луч упирается в щит). */
+  beam: Beam | null = null;
+  /** Урон луча, накопленный с прошлой проверки столкновений. */
+  beamDamage = 0;
   readonly enemyBullets: Bullet[] = [];
   readonly missiles: Missile[] = [];
 
   private bulletPool: SpritePool;
+  /** Ракеты вылетают то вправо, то влево: залп зеркалится через раз. */
+  private rocketSide = 1;
   private enemyBulletPool: SpritePool;
   private tx: Textures;
   private missileLayer: Container;
   private field: Field;
   private player: Player;
   private fx: Effects;
+  private beamSprite: Sprite;
 
   constructor(textures: Textures, bulletLayer: Container, fxLayer: Container, field: Field, player: Player, fx: Effects) {
     this.tx = textures;
@@ -46,18 +87,54 @@ export class Projectiles {
     this.fx = fx;
     this.bulletPool = new SpritePool(textures.bullet, bulletLayer);
     this.enemyBulletPool = new SpritePool(textures.enemyBullet, fxLayer);
+    this.beamSprite = new Sprite(textures.beam);
+    this.beamSprite.anchor.set(0.5, 1);
+    this.beamSprite.visible = false;
+    bulletLayer.addChild(this.beamSprite);
   }
 
-  /** Залп игрока: узор зависит от уровня пушки. */
+  /** Залп игрока: узор, скорость и урон пуль — от вида и уровня оружия. У лазера — тик урона луча. */
   firePlayer() {
     const { x, y, weapon } = this.player;
-    sfx.shoot();
-    for (const [dx, vx] of WEAPON_PATTERNS[weapon]) {
-      const s = this.bulletPool.get();
-      s.position.set(x + dx, y - 30);
-      s.rotation = Math.atan2(vx, PLAYER.bulletSpeed);
-      this.bullets.push({ s, vx, vy: -PLAYER.bulletSpeed, r: PLAYER.bulletR });
+    const spec = WEAPONS[weapon.kind];
+    const texture = this.tx[SHOT_TEXTURE[weapon.kind]];
+    SHOT_SOUND[weapon.kind]();
+    if ('beam' in spec) {
+      this.beamDamage += spec.beam[weapon.level - 1].dps * spec.interval;
+      return;
     }
+    if ('volleys' in spec) {
+      const { volleys, speed, damage, turnRate } = spec;
+      const side = (this.rocketSide = -this.rocketSide);
+      for (const [dx, angle] of volleys[weapon.level - 1]) {
+        const a = angle * side;
+        this.addBullet(texture, x + dx * side, y - 20, Math.sin(a) * speed, -Math.cos(a) * speed, {
+          damage,
+          homing: turnRate,
+        });
+      }
+      return;
+    }
+    const { patterns, bulletSpeed, damage } = spec;
+    const pierce = 'pierce' in spec ? spec.pierce : 0;
+    for (const [dx, vx] of patterns[weapon.level - 1]) {
+      this.addBullet(texture, x + dx, y - 30, vx, -bulletSpeed, { damage, pierce });
+    }
+  }
+
+  private addBullet(
+    texture: Texture,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    { damage, homing = 0, pierce = 0 }: { damage: number; homing?: number; pierce?: number },
+  ) {
+    const s = this.bulletPool.get();
+    s.texture = texture; // в пуле снаряды всех видов
+    s.position.set(x, y);
+    s.rotation = Math.atan2(vx, -vy);
+    this.bullets.push({ s, vx, vy, r: PLAYER.bulletR, damage, homing, pierce, hit: [], kind: this.player.weapon.kind });
   }
 
   /** Вражеский выстрел в игрока (со смещением угла); если игрока нет — вниз. */
@@ -84,6 +161,32 @@ export class Projectiles {
     this.missiles.push({ s, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, homing: homingTime });
   }
 
+  /** Луч лазера: включён, пока в руках лазер и on (самолёт жив и стреляет). Идёт за самолётом. */
+  updateBeam(on: boolean) {
+    const { x, y, weapon } = this.player;
+    const spec = WEAPONS[weapon.kind];
+    if (!on || !('beam' in spec)) {
+      this.hideBeam();
+      return;
+    }
+    const half = spec.beam[weapon.level - 1].width / 2;
+    const bottom = y - BEAM_FROM_NOSE;
+    const top = this.beam?.top ?? BEAM_OFF_SCREEN;
+    this.beam = { x, half, bottom, top: BEAM_OFF_SCREEN };
+    // рисуем до прошлого препятствия: столкновения этого кадра обновят top для следующего
+    const s = this.beamSprite;
+    s.visible = true;
+    s.position.set(x, bottom);
+    s.width = half * 2 * BEAM_GLOW * (1 + (Math.random() - 0.5) * BEAM_FLICKER);
+    s.height = Math.max(0, bottom - top);
+  }
+
+  private hideBeam() {
+    this.beam = null;
+    this.beamDamage = 0;
+    this.beamSprite.visible = false;
+  }
+
   removeBullet(i: number) {
     releaseAt(this.bullets, i, this.bulletPool);
   }
@@ -107,12 +210,27 @@ export class Projectiles {
     while (this.missiles.length) this.destroyMissile(this.missiles.length - 1);
   }
 
-  updateBullets(dt: number) {
+  /** Пули летят прямо, ракеты доворачивают на ближайшую из targets (без целей — вверх). */
+  updateBullets(dt: number, targets: readonly Point[]) {
+    const { w, h } = this.field;
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
+      if (b.homing > 0) {
+        const target = nearest(b.s, targets);
+        const goal = target ? Math.atan2(target.y - b.s.y, target.x - b.s.x) : -Math.PI / 2;
+        const angle = turnToward(Math.atan2(b.vy, b.vx), goal, b.homing * dt);
+        const speed = Math.hypot(b.vx, b.vy);
+        b.vx = Math.cos(angle) * speed;
+        b.vy = Math.sin(angle) * speed;
+        b.s.rotation = angle + Math.PI / 2;
+        if (Math.random() < ROCKET_TRAIL_CHANCE) {
+          this.fx.explode(b.s.x - b.vx * 0.03, b.s.y - b.vy * 0.03, WEAPON_LOOK.rocket.color, 1, ROCKET_TRAIL_SPEED);
+        }
+      }
       b.s.x += b.vx * dt;
       b.s.y += b.vy * dt;
-      if (b.s.y < -30) this.removeBullet(i);
+      const { x, y } = b.s;
+      if (y < -30 || y > h + 30 || x < -30 || x > w + 30) this.removeBullet(i);
     }
   }
 
@@ -146,6 +264,7 @@ export class Projectiles {
   }
 
   clear() {
+    this.hideBeam();
     releaseAll(this.bullets, this.bulletPool);
     releaseAll(this.enemyBullets, this.enemyBulletPool);
     while (this.missiles.length) removeAt(this.missiles, this.missiles.length - 1);

@@ -3,19 +3,24 @@ import { sfx } from '../audio';
 import {
   COINS,
   DEFAULT_SKIN,
+  DEFAULT_WEAPON,
   ENEMY,
   NO_UPGRADES,
   PLAYER,
   POWER_UP,
+  WEAPONS,
   type EnemyKind,
   type PowerUpKind,
   type SkinName,
   type Upgrades,
+  type Weapon,
+  type WeaponKind,
 } from './balance';
 import type { WorldDebug } from './debug';
 import type { Textures } from './textures';
+import { WEAPON_LOOK } from './weaponLook';
 import { FORMATIONS, type FormationName } from './waves';
-import { collide, type Battle, type HitCause } from './world/collisions';
+import { collide, type Battle, type HitCause, type Killer } from './world/collisions';
 import { Effects } from './world/Effects';
 import { bossAttack, Enemies, type Enemy } from './world/Enemies';
 import { Field } from './world/Field';
@@ -27,10 +32,11 @@ import {
   bossDrop,
   comboMultiplier,
   killScore,
+  mainWeapon,
+  pickWeapon,
   rollDrop,
   startStats,
   takeHit,
-  upgradeWeapon,
 } from './world/rules';
 import { Waves } from './world/Waves';
 
@@ -48,20 +54,22 @@ import { Waves } from './world/Waves';
 export type { EnemyKind } from './balance';
 export type UpdateMode = 'run' | 'idle' | 'frozen';
 
-/** С чем игрок вылетает: улучшения и скин из ангара. */
+/** С чем игрок вылетает: улучшения, скин и стартовое оружие из ангара. */
 export interface Loadout {
   upgrades: Upgrades;
   skin: SkinName;
+  weapon: WeaponKind;
 }
 
 export interface WorldEvents {
   score(n: number): void;
   lives(n: number): void;
-  weapon(n: number): void;
+  weapon(w: Weapon): void;
   /** Множитель очков за врагов (1 — комбо нет). */
   combo(multiplier: number): void;
   hit(): void;
-  kill(kind: EnemyKind): void;
+  /** Игрок сбил врага kind оружием или бомбой (by). */
+  kill(kind: EnemyKind, by: Killer): void;
   powerUp(): void;
   /** Монет собрано за партию. */
   coins(n: number): void;
@@ -72,7 +80,7 @@ export interface WorldEvents {
   gameOver(score: number, death: Death): void;
 }
 
-export type { HitCause };
+export type { HitCause, Killer };
 
 /** Как кончилась партия — для аналитики. */
 export interface Death {
@@ -80,6 +88,12 @@ export interface Death {
   cause: HitCause;
   /** Сколько секунд шла партия (без пауз). */
   seconds: number;
+  /** Оружие в момент гибели (уровень уже после последнего попадания). */
+  weapon: Weapon;
+  /** С каким видом вылетел из ангара. */
+  startWeapon: WeaponKind;
+  /** С каким видом провёл больше всего времени. */
+  mainWeapon: WeaponKind;
 }
 
 interface Star {
@@ -97,21 +111,28 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   splitter: 0xff8fd8,
   mini: 0xff8fd8,
 };
-const POWER_UP_COLOR: Record<PowerUpKind, number> = {
-  gun: 0xffd23f,
+/** Искры при подборе; у капсулы оружия — цвет её вида (WEAPON_LOOK). */
+const POWER_UP_COLOR: Record<Exclude<PowerUpKind, 'weapon'>, number> = {
   life: 0xff4d8d,
   shield: 0x5fd4ff,
   magnet: 0xff6b6b,
   bomb: 0xff9f1c,
 };
-/** Подпись при подборе: для пушки и жизни хватает HUD, остальные стоит назвать. */
+/** Подпись при подборе: для оружия (если сменился вид — его название) и жизни хватает HUD, остальные стоит назвать. */
 const POWER_UP_LABEL: Partial<Record<PowerUpKind, string>> = {
   shield: 'ЩИТ',
   magnet: 'МАГНИТ',
   bomb: 'БОМБА',
 };
 const POPUP_BONUS_COLOR = 0xffffff;
-const HIT_SPARK_COLOR = 0xffd23f; // искры от попадания по врагу
+/** Искры от попадания по врагу — цвета оружия: сколько и как быстро разлетаются. Ракета ещё и хлопает. */
+const HIT_SPARKS: Record<WeaponKind, { count: number; speed: number }> = {
+  gun: { count: 4, speed: 120 },
+  spread: { count: 2, speed: 90 },
+  laser: { count: 2, speed: 70 }, // луч бьёт тиками часто — искр на тик мало
+  pierce: { count: 5, speed: 200 },
+  rocket: { count: 14, speed: 220 },
+};
 const DEFLECT_COLOR = 0xdfe6f2; // искры от щита щитоносца
 const COIN_COLOR = 0xffd23f;
 const DAMAGE_COLOR = 0xffb020; // игрок потерял жизнь
@@ -151,7 +172,16 @@ export class World {
   private upgrades: Upgrades = NO_UPGRADES; // из ангара, на всю партию
   private skin: SkinName = DEFAULT_SKIN;
   private deathTimer = 0;
-  private death: Death = { cause: 'bullet', seconds: 0 };
+  private death: Death = {
+    cause: 'bullet',
+    seconds: 0,
+    weapon: { kind: DEFAULT_WEAPON, level: 1 },
+    startWeapon: DEFAULT_WEAPON,
+    mainWeapon: DEFAULT_WEAPON,
+  };
+  private startWeapon: WeaponKind = DEFAULT_WEAPON;
+  /** Сколько секунд партии в руках был каждый вид — для аналитики. */
+  private weaponSeconds: Partial<Record<WeaponKind, number>> = {};
   private autoSpawn = true; // e2e-тесты выключают случайных врагов
   private cheats = { noDamage: false, holdFire: false }; // тоже только для тестов
 
@@ -176,9 +206,9 @@ export class World {
       shots: this.shots,
       enemies: this.enemies,
       pickups: this.pickups,
-      damageEnemy: (e, x, y) => this.damageEnemy(e, x, y),
+      damageEnemy: (e, x, y, damage, kind) => this.damageEnemy(e, x, y, damage, kind),
       deflect: (x, y) => this.deflect(x, y),
-      destroyEnemy: (e, byPlayer) => this.destroyEnemy(e, byPlayer),
+      destroyEnemy: (e, by) => this.destroyEnemy(e, by),
       damagePlayer: (cause) => this.damagePlayer(cause),
       pickCoin: (i) => this.pickCoin(i),
       coinsPicked: () => {
@@ -223,12 +253,14 @@ export class World {
     this.deathTimer = 0;
   }
 
-  /** Новая игра с улучшениями и скином из ангара. */
-  reset({ upgrades, skin }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN }) {
+  /** Новая игра с улучшениями, скином и оружием из ангара. */
+  reset({ upgrades, skin, weapon }: Loadout = { upgrades: NO_UPGRADES, skin: DEFAULT_SKIN, weapon: DEFAULT_WEAPON }) {
     this.clear();
     this.upgrades = upgrades;
     this.skin = skin;
-    this.player.reset(startStats(upgrades), skin);
+    this.startWeapon = weapon;
+    this.weaponSeconds = {};
+    this.player.reset(startStats(upgrades, weapon), skin);
     this.score = 0;
     this.coinCount = 0;
     this.combo = 0;
@@ -260,14 +292,17 @@ export class World {
     this.field.elapsed += dt;
 
     if (this.field.alive) {
+      const { kind } = this.player.weapon;
+      this.weaponSeconds[kind] = (this.weaponSeconds[kind] ?? 0) + dt;
       if (this.player.update(dt, this.keys, this.cheats.holdFire)) this.shots.firePlayer();
       if (this.autoSpawn) this.waves.update(dt);
     } else if (this.deathTimer > 0) {
       this.deathTimer -= dt;
       if (this.deathTimer <= 0) this.ev.gameOver(this.score, this.death);
     }
+    this.shots.updateBeam(this.field.alive && !this.cheats.holdFire);
 
-    this.shots.updateBullets(dt);
+    this.shots.updateBullets(dt, this.enemies.list.map((e) => e.s));
     this.enemies.update(dt);
     this.shots.updateEnemyFire(dt);
     this.pickups.update(dt);
@@ -297,7 +332,7 @@ export class World {
     const hit = takeHit({ lives: p.lives, weapon: p.weapon, shield: p.shield, combo: this.combo });
 
     if (hit.absorbed) {
-      // щит принял удар: жизнь, пушка и комбо остаются
+      // щит принял удар: жизнь, оружие и комбо остаются
       p.setShield(false);
       p.invuln = POWER_UP.shieldBreakInvuln;
       this.fx.setShake(6);
@@ -317,7 +352,7 @@ export class World {
     this.fx.setShake(12);
     sfx.damage();
     this.fx.explode(x, y, DAMAGE_COLOR, 18, 240);
-    if (p.weapon !== hit.weapon) {
+    if (p.weapon.level !== hit.weapon.level) {
       p.weapon = hit.weapon;
       this.ev.weapon(p.weapon);
     }
@@ -327,7 +362,13 @@ export class World {
       return;
     }
     this.field.alive = false;
-    this.death = { cause, seconds: this.field.elapsed };
+    this.death = {
+      cause,
+      seconds: this.field.elapsed,
+      weapon: p.weapon,
+      startWeapon: this.startWeapon,
+      mainWeapon: mainWeapon(this.weaponSeconds, this.startWeapon),
+    };
     p.view.visible = false;
     this.fx.explode(x, y, DEATH_COLOR, 50, 400);
     this.fx.explode(x, y, 0xffffff, 20, 200);
@@ -343,17 +384,19 @@ export class World {
     sfx.deflect();
   }
 
-  private damageEnemy(e: Enemy, x: number, y: number) {
-    e.hp--;
+  private damageEnemy(e: Enemy, x: number, y: number, damage: number, kind: WeaponKind) {
+    e.hp -= damage;
     e.flash = 0.07;
-    this.fx.explode(x, y, HIT_SPARK_COLOR, 4, 120);
+    const { count, speed } = HIT_SPARKS[kind];
+    this.fx.explode(x, y, WEAPON_LOOK[kind].color, count, speed);
+    if (kind === 'rocket') sfx.rocketHit();
     this.enemies.drawBar(e);
     if (e.hp > 0) sfx.hit();
-    else this.destroyEnemy(e, true);
+    else this.destroyEnemy(e, kind);
   }
 
-  /** Враг уничтожен; byPlayer — сбит игроком (очки, комбо, добыча), а не разбился о него. */
-  private destroyEnemy(e: Enemy, byPlayer: boolean) {
+  /** Враг уничтожен; by — чем сбил игрок (очки, комбо, добыча), null — разбился о самолёт. */
+  private destroyEnemy(e: Enemy, by: Killer | null) {
     if (!this.enemies.list.includes(e)) return;
     const { x, y } = e.s; // до remove: потом спрайт уничтожен
     const color = ENEMY_COLOR[e.kind];
@@ -364,7 +407,7 @@ export class World {
     sfx.explosion(big);
     this.enemies.remove(e);
 
-    if (!byPlayer) return;
+    if (!by) return;
     if (e.kind === 'splitter') {
       for (const side of [-1, 1]) {
         const m = this.enemies.spawn('mini');
@@ -379,7 +422,7 @@ export class World {
     if (kill.multiplierChanged) this.ev.combo(kill.multiplier);
     this.score += kill.points;
     this.ev.score(this.score);
-    this.ev.kill(e.kind);
+    this.ev.kill(e.kind, by);
     if (big) this.ev.bossDown(e.flawless);
     this.fx.popup(x, y - e.r, `+${kill.points}`, color);
 
@@ -406,15 +449,17 @@ export class World {
   }
 
   private pickPowerUp(i: number) {
-    const { s, kind } = this.pickups.powerUps[i];
+    const { s, kind, weapon } = this.pickups.powerUps[i];
     const { x, y } = s;
     // убираем до применения: бомба может породить новые бонусы
     this.pickups.removePowerUp(i);
     this.score += POWER_UP.points;
     this.ev.score(this.score);
     const p = this.player;
-    if (kind === 'gun') {
-      p.weapon = upgradeWeapon(p.weapon);
+    let label = kind === 'weapon' ? undefined : POWER_UP_LABEL[kind];
+    if (kind === 'weapon') {
+      if (weapon !== p.weapon.kind) label = WEAPON_LOOK[weapon].label;
+      p.weapon = pickWeapon(p.weapon, weapon);
       this.ev.weapon(p.weapon);
     } else if (kind === 'life') {
       p.lives = addLife(p.lives);
@@ -426,11 +471,10 @@ export class World {
     } else {
       this.detonateBomb();
     }
-    const label = POWER_UP_LABEL[kind];
     this.fx.popup(x, y - 20, label ? `${label} +${POWER_UP.points}` : `+${POWER_UP.points}`, POPUP_BONUS_COLOR);
     this.ev.powerUp();
     sfx.powerUp();
-    this.fx.explode(x, y, POWER_UP_COLOR[kind], 12, 160);
+    this.fx.explode(x, y, kind === 'weapon' ? WEAPON_LOOK[weapon].color : POWER_UP_COLOR[kind], 12, 160);
   }
 
   /** Бомба: сбивает всех врагов на экране, ранит босса и стирает вражеские пули. */
@@ -441,13 +485,13 @@ export class World {
         e.hp -= POWER_UP.bombBossDamage;
         e.flash = 0.2;
         this.enemies.drawBar(e);
-        if (e.hp <= 0) this.destroyEnemy(e, true);
+        if (e.hp <= 0) this.destroyEnemy(e, 'bomb');
       } else {
-        this.destroyEnemy(e, true);
+        this.destroyEnemy(e, 'bomb');
       }
     }
     // осколки сплиттеров, появившиеся от взрыва
-    for (const e of [...this.enemies.list]) if (e.kind === 'mini') this.destroyEnemy(e, true);
+    for (const e of [...this.enemies.list]) if (e.kind === 'mini') this.destroyEnemy(e, 'bomb');
     this.shots.clearEnemyFire();
     this.fx.flashBomb();
     this.fx.shakeAtLeast(BOMB_SHAKE);
@@ -471,7 +515,7 @@ export class World {
         fireInterval: p.fireInterval,
         wave: this.waves.wave,
         lives: p.lives,
-        weapon: p.weapon,
+        weapon: { ...p.weapon },
         combo: comboMultiplier(this.combo),
         invuln: Math.max(0, p.invuln),
         shield: p.shield,
@@ -483,11 +527,17 @@ export class World {
           ...(e.kind === 'mother' ? { attack: bossAttack(e) } : {}),
           ...pos(e.s),
         })),
-        powerUps: this.pickups.powerUps.map((u) => ({ kind: u.kind, ...pos(u.s) })),
+        powerUps: this.pickups.powerUps.map((u) => ({
+          kind: u.kind,
+          ...(u.kind === 'weapon' ? { weapon: u.weapon } : {}),
+          ...pos(u.s),
+        })),
         coinsOnField: this.pickups.coins.map((c) => ({ kind: 'coin', ...pos(c.s) })),
         missiles: this.shots.missiles.map((m) => ({ kind: 'missile', ...pos(m.s) })),
         enemyBullets: this.shots.enemyBullets.length,
         playerBullets: this.shots.bullets.length,
+        playerBulletPositions: this.shots.bullets.map((b) => pos(b.s)),
+        beam: this.shots.beam && { ...this.shots.beam },
       }),
       setAutoSpawn: (on) => {
         this.autoSpawn = on;
@@ -497,9 +547,14 @@ export class World {
         const e = this.enemies.spawn(kind as EnemyKind, x);
         e.s.y = y;
       },
-      spawnPowerUp: (kind, x, y) => {
+      spawnPowerUp: (kind, x, y, capsule = {}) => {
         if (!(kind in POWER_UP.drops)) throw new Error(`Нет такого бонуса: ${kind}`);
-        this.pickups.spawnPowerUp(x, y, kind as PowerUpKind);
+        const weapon = capsule.weapon ?? p.weapon.kind;
+        if (!(weapon in WEAPONS)) throw new Error(`Нет такого оружия: ${weapon}`);
+        this.pickups.spawnPowerUp(x, y, kind as PowerUpKind, {
+          weapon: weapon as WeaponKind,
+          cycles: capsule.cycles ?? false,
+        });
       },
       spawnCoin: (x, y) => this.pickups.spawnCoin(x, y),
       startWave: (n) => {

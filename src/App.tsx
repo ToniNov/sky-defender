@@ -98,7 +98,13 @@ export default function App() {
       {overlay === 'settings' && <SettingsScreen settings={settings.settings} onChange={settings.update} onClose={close} />}
 
       {overlay === 'hangar' && (
-        <HangarScreen progress={progress} onBuy={save.buyUpgrade} onPickSkin={save.pickSkin} onClose={close} />
+        <HangarScreen
+          progress={progress}
+          onBuy={save.buyUpgrade}
+          onPickSkin={save.pickSkin}
+          onPickWeapon={save.pickWeapon}
+          onClose={close}
+        />
       )}
 
       {overlay === 'quests' && <QuestsScreen quests={progress.quests.active} onClaim={save.claimQuest} onClose={close} />}

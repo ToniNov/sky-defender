@@ -1,16 +1,76 @@
 import { expect, test } from '@playwright/test';
+import { POWER_UP } from '../src/game/balance.ts';
 import { pickUp, snapshot, spawnEnemy, spawnPowerUp, startGame } from './helpers.ts';
 
 test.beforeEach(async ({ page }) => {
   await startGame(page);
 });
 
-test('пушка и жизнь', async ({ page }) => {
-  await pickUp(page, 'gun');
+test('капсула того же оружия и жизнь', async ({ page }) => {
+  await pickUp(page, 'weapon');
   await pickUp(page, 'life');
   const s = await snapshot(page);
-  expect(s.weapon).toBe(2);
+  expect(s.weapon).toEqual({ kind: 'gun', level: 2 });
   expect(s.lives).toBe(4);
+});
+
+test('капсула другого вида меняет оружие, уровень остаётся', async ({ page }) => {
+  await pickUp(page, 'weapon');
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 2 });
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 3 });
+});
+
+test('HUD показывает вид оружия и уровень', async ({ page }) => {
+  const badge = page.locator('.hud-weapon');
+  await expect(badge).toHaveAttribute('aria-label', 'Оружие: пушка, уровень 1');
+  await expect(badge.locator('.weapon-badge')).toHaveText('П');
+  await pickUp(page, 'weapon', { weapon: 'laser' });
+  await pickUp(page, 'weapon', { weapon: 'laser' });
+  await expect(badge).toHaveAttribute('aria-label', 'Оружие: лазер, уровень 2');
+  await expect(badge.locator('.weapon-badge')).toHaveText('Л');
+  await expect(badge.locator('i.on')).toHaveCount(2);
+});
+
+test('вид в летящей капсуле меняется', async ({ page }) => {
+  const { w } = await snapshot(page);
+  await spawnPowerUp(page, 'weapon', w / 2, -200, { weapon: 'gun', cycles: true });
+  const capsule = async () => (await snapshot(page)).powerUps.find((u) => u.kind === 'weapon')?.weapon;
+  expect(await capsule()).toBe('gun');
+  await expect.poll(capsule, { timeout: POWER_UP.weaponCycle * 1000 + 2000 }).toBe('spread');
+});
+
+test('веер стреляет широким конусом, пушка — прямо', async ({ page }) => {
+  // самый дальний от самолёта по горизонтали полёт пули
+  const spread = async () => {
+    const { player, playerBulletPositions } = await snapshot(page);
+    return Math.max(0, ...playerBulletPositions.map((b) => Math.abs(b.x - player.x)));
+  };
+  await page.waitForTimeout(500);
+  expect(await spread()).toBeLessThan(5); // пушка первого уровня — одна пуля строго вверх
+
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  await expect.poll(spread).toBeGreaterThan(100);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
+});
+
+test('урон снимает уровень оружия, но не вид', async ({ page }) => {
+  // не пушка: она и так стартовая — сброс на неё тест бы не заметил
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  await pickUp(page, 'weapon', { weapon: 'spread' });
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 2 });
+  const ram = async (lives: number) => {
+    await expect.poll(async () => (await snapshot(page)).invuln).toBe(0);
+    const { player } = await snapshot(page);
+    await spawnEnemy(page, 'scout', player.x, player.y);
+    await expect.poll(async () => (await snapshot(page)).lives).toBe(lives);
+  };
+  await ram(2);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
+  // на первом уровне ниже некуда — вид и уровень остаются
+  await ram(1);
+  expect((await snapshot(page)).weapon).toEqual({ kind: 'spread', level: 1 });
 });
 
 test('щит принимает таран вместо жизни', async ({ page }) => {
@@ -34,8 +94,8 @@ test('магнит притягивает бонус с другого края 
   expect((await snapshot(page)).magnet).toBeGreaterThan(0);
 
   const { w } = await snapshot(page);
-  await spawnPowerUp(page, 'gun', w - 20, 60);
-  await expect.poll(async () => (await snapshot(page)).weapon).toBe(2);
+  await spawnPowerUp(page, 'weapon', w - 20, 60);
+  await expect.poll(async () => (await snapshot(page)).weapon.level).toBe(2);
 });
 
 test('бомба сбивает врагов на экране и ранит босса', async ({ page }) => {

@@ -1,14 +1,17 @@
 import { isDayKey, NO_DAILY, type Daily } from './daily';
 import {
   DEFAULT_SKIN,
+  DEFAULT_WEAPON,
   NO_UPGRADES,
   QUESTS,
   SKINS,
   UPGRADE_NAMES,
   upgradeMax,
+  WEAPON_COST,
   type QuestKind,
   type SkinName,
   type Upgrades,
+  type WeaponKind,
 } from './game/balance';
 import { fillQuests, questTarget, type Quest, type Quests } from './quests';
 import { readCloudString, readLocalString, writeString } from './telegram';
@@ -30,18 +33,23 @@ export interface Progress {
   daily: Daily;
   quests: Quests;
   skins: Skins;
+  /** Виды оружия из ангара: купленные и стартовый. */
+  weapons: Weapons;
   /** Время последнего сохранения (мс): из облака и устройства берём более свежее. */
   t: number;
 }
 
-export interface Skins {
-  owned: SkinName[];
-  selected: SkinName;
+/** Купленное в ангаре (owned) и выбранное из купленного (selected). */
+interface Owned<K extends string> {
+  owned: K[];
+  selected: K;
 }
+export type Skins = Owned<SkinName>;
+export type Weapons = Owned<WeaponKind>;
 
 type Raw = Record<string, unknown>;
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 const KEY = 'progress';
 const LEGACY_BEST_KEY = 'best_score'; // до версии 1 рекорд лежал отдельным числом
 
@@ -52,11 +60,13 @@ const MIGRATIONS: Record<number, (d: Raw) => Raw> = {
   2: (d) => ({ ...d, daily: { last: '', streak: 0 } }),
   3: (d) => ({ ...d, quests: { active: [], done: {} } }),
   4: (d) => ({ ...d, skins: { owned: [DEFAULT_SKIN], selected: DEFAULT_SKIN } }),
+  5: (d) => ({ ...d, weapons: { owned: [DEFAULT_WEAPON], selected: DEFAULT_WEAPON } }),
 };
 
 export const EMPTY_PROGRESS: Progress = {
   best: 0, coins: 0, upgrades: NO_UPGRADES, daily: NO_DAILY, quests: fillQuests({ active: [], done: {} }),
   skins: { owned: [DEFAULT_SKIN], selected: DEFAULT_SKIN },
+  weapons: { owned: [DEFAULT_WEAPON], selected: DEFAULT_WEAPON },
   t: 0,
 };
 
@@ -66,14 +76,18 @@ const isQuestKind = (k: unknown): k is QuestKind => typeof k === 'string' && k i
 const asObject = (x: unknown): Raw => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Raw) : {});
 
 const isSkin = (k: unknown): k is SkinName => typeof k === 'string' && k in SKINS;
+const isWeapon = (k: unknown): k is WeaponKind => typeof k === 'string' && k in WEAPON_COST;
 
-/** Скины из более новой версии игры храним как есть, а выбранным тогда считаем классический. */
-function parseSkins(x: unknown): Skins {
+/**
+ * Купленное из ангара: бесплатное (free) есть всегда. Незнакомое (из более новой версии игры) складываем в unknown —
+ * его сохраним как есть, а выбранным тогда считаем free.
+ */
+function parseOwned<K extends string>(x: unknown, isKind: (k: unknown) => k is K, free: K, unknown: string[]): Owned<K> {
   const raw = asObject(x);
-  const list = Array.isArray(raw.owned) ? raw.owned : [];
-  for (const k of list) if (typeof k === 'string' && !isSkin(k) && !unknownSkins.includes(k)) unknownSkins.push(k);
-  const owned = [DEFAULT_SKIN, ...list.filter(isSkin).filter((k) => k !== DEFAULT_SKIN)];
-  const selected = isSkin(raw.selected) && owned.includes(raw.selected) ? raw.selected : DEFAULT_SKIN;
+  const list: unknown[] = Array.isArray(raw.owned) ? raw.owned : [];
+  for (const k of list) if (typeof k === 'string' && !isKind(k) && !unknown.includes(k)) unknown.push(k);
+  const owned = [free, ...list.filter(isKind).filter((k) => k !== free)];
+  const selected = isKind(raw.selected) && owned.includes(raw.selected) ? raw.selected : free;
   return { owned: [...new Set(owned)], selected };
 }
 
@@ -100,6 +114,7 @@ let unknownFields: Raw = {};
 let storedVersion = 0; // и номер версии не понижаем
 let unknownUpgrades: Raw = {}; // и улучшения, которых здесь ещё нет
 const unknownSkins: string[] = []; // и скины
+const unknownWeapons: string[] = []; // и виды оружия
 
 export function migrate(data: Raw): Raw {
   let d = data;
@@ -126,7 +141,7 @@ function parse(json: string | null, legacyBest: string | null): Raw | null {
 
 function toProgress(d: Raw | null): Progress {
   if (!d) return EMPTY_PROGRESS;
-  const { v, best, coins, upgrades, daily, quests, skins, t, ...rest } = d;
+  const { v, best, coins, upgrades, daily, quests, skins, weapons, t, ...rest } = d;
   unknownFields = { ...unknownFields, ...rest };
   storedVersion = Math.max(storedVersion, count(v));
   const raw: Raw = upgrades && typeof upgrades === 'object' ? (upgrades as Raw) : {};
@@ -141,7 +156,8 @@ function toProgress(d: Raw | null): Progress {
     upgrades: known,
     daily: { last, streak: last ? count(dl.streak) : 0 },
     quests: parseQuests(quests),
-    skins: parseSkins(skins),
+    skins: parseOwned(skins, isSkin, DEFAULT_SKIN, unknownSkins),
+    weapons: parseOwned(weapons, isWeapon, DEFAULT_WEAPON, unknownWeapons),
     t: count(t),
   };
 }
@@ -175,6 +191,7 @@ export function saveProgress(p: Progress) {
       daily: p.daily,
       quests: p.quests,
       skins: { ...p.skins, owned: [...p.skins.owned, ...unknownSkins] },
+      weapons: { ...p.weapons, owned: [...p.weapons.owned, ...unknownWeapons] },
       t: p.t,
     }),
   );

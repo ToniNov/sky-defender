@@ -1,8 +1,8 @@
 import { Container, Sprite } from 'pixi.js';
-import { DEFAULT_SKIN, PLAYER, type SkinName } from '../balance';
+import { DEFAULT_SKIN, DEFAULT_WEAPON, PLAYER, type SkinName, type Weapon } from '../balance';
 import { planeTexture, type Textures } from '../textures';
 import type { Field } from './Field';
-import { clamp, rand, startStats } from './rules';
+import { clamp, fireInterval, rand, startStats } from './rules';
 
 const MAGNET_BLINK_TIME = 2; // последние секунды магнита кольцо мигает
 
@@ -15,12 +15,13 @@ export class Player {
   readonly view = new Container();
 
   lives: number = PLAYER.startLives;
-  weapon = 1;
+  weapon: Weapon = { kind: DEFAULT_WEAPON, level: 1 };
   invuln = 0;
   shield = false;
   /** Сколько ещё действует магнит. */
   magnet = 0;
-  fireInterval: number = PLAYER.fireInterval;
+  /** Множитель паузы между залпами (улучшение скорострельности). */
+  reload = 1;
   magnetTime = 0;
   private fireCd = 0;
 
@@ -61,7 +62,7 @@ export class Player {
     this.body.texture = this.tx[planeTexture(skin)];
     this.lives = stats.lives;
     this.weapon = stats.weapon;
-    this.fireInterval = stats.fireInterval;
+    this.reload = stats.reload;
     this.magnetTime = stats.magnetTime;
     this.fireCd = PLAYER.firstShotDelay;
     this.invuln = PLAYER.startInvuln;
@@ -90,6 +91,11 @@ export class Player {
     const { w, h } = this.field;
     this.view.x = clamp(this.view.x, 26, w - 26);
     this.view.y = clamp(this.view.y, h * 0.3, h - 50);
+  }
+
+  /** Пауза между залпами текущего оружия. */
+  get fireInterval() {
+    return fireInterval(this.weapon, this.reload);
   }
 
   setShield(on: boolean) {

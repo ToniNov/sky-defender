@@ -10,25 +10,121 @@ export const DIFFICULTY_TIME = 100;
 export const PLAYER = {
   startLives: 3,
   maxLives: 5,
-  maxWeapon: 3,
+  maxWeapon: 3, // уровней у каждого вида оружия
   r: 16, // радиус хитбокса
   keySpeed: 460, // скорость с клавиатуры
   dragFactor: 1.25, // во сколько раз самолёт сдвигается дальше пальца
-  fireInterval: 0.15,
   firstShotDelay: 0.3,
-  bulletSpeed: 760,
   bulletR: 6,
   startInvuln: 1.2, // неуязвимость в начале партии
   hitInvuln: 1.8, // неуязвимость после попадания
   pickupR: 32, // радиус подбора бонусов
 } as const;
 
-/** Узоры выстрела по уровню пушки: [смещение по x, скорость по x]. */
-export const WEAPON_PATTERNS: Record<number, readonly (readonly [number, number])[]> = {
-  1: [[0, 0]],
-  2: [[-9, 0], [9, 0]],
-  3: [[0, 0], [-12, -150], [12, 150]],
+/** Залп: пули [смещение по x, скорость по x]. */
+type Volley = readonly (readonly [number, number])[];
+
+/** Оружие, которое стреляет пулями: damage — урон одной пули, patterns[n] — залп на уровне n + 1. */
+interface VolleySpec {
+  interval: number; // пауза между залпами (до улучшения скорострельности)
+  damage: number;
+  bulletSpeed: number;
+  patterns: readonly Volley[];
+  pierce?: number; // сколько врагов пуля пробивает, прежде чем пропасть (щит её всё равно держит)
+}
+/** Ракеты: летят по дуге и доворачивают на ближайшего врага; volleys[n] — залп на уровне n + 1. */
+interface RocketSpec {
+  interval: number; // пауза между залпами (до улучшения скорострельности)
+  damage: number;
+  speed: number;
+  turnRate: number; // доворот на цель, рад/с
+  volleys: readonly Volley[]; // ракеты [смещение по x, угол вылета от вертикали, рад]; каждый залп зеркалится
+}
+/** Луч: бьёт всех на линии вверх от самолёта раз в interval; beam[n] — уровень n + 1. */
+interface BeamSpec {
+  interval: number; // тик урона (улучшение скорострельности делает его чаще)
+  beam: readonly { dps: number; width: number }[];
+}
+
+/** Виды оружия, у каждого PLAYER.maxWeapon уровней. */
+export const WEAPONS = {
+  gun: {
+    interval: 0.15,
+    damage: 1,
+    bulletSpeed: 760,
+    patterns: [
+      [[0, 0]],
+      [[-9, 0], [9, 0]],
+      [[0, 0], [-12, -150], [12, 150]],
+    ],
+  },
+  // веер: широкий конус слабых пуль — против роя, но по одной цели слабее пушки
+  spread: {
+    interval: 0.2,
+    damage: 0.5,
+    bulletSpeed: 640,
+    patterns: [
+      [[0, 0], [-6, -200], [6, 200]],
+      [[0, 0], [-6, -140], [6, 140], [-10, -280], [10, 280]],
+      [[0, 0], [-5, -110], [5, 110], [-8, -220], [8, 220], [-12, -330], [12, 330]],
+    ],
+  },
+  // лазер: сплошной луч, пробивает всех на линии; урон в секунду ниже пушки — зато по всем сразу.
+  // Щит щитоносца луч не пробивает: дальше щита он не идёт
+  laser: {
+    interval: 0.1,
+    beam: [
+      { dps: 5, width: 10 },
+      { dps: 8, width: 16 },
+      { dps: 12, width: 24 },
+    ],
+  },
+  // иглы: быстрые пули, каждая пробивает несколько врагов подряд — против колонн и плотных построений;
+  // по одной цели слабее пушки
+  pierce: {
+    interval: 0.2,
+    damage: 1,
+    bulletSpeed: 900,
+    pierce: 3,
+    patterns: [
+      [[0, 0]],
+      [[-9, 0], [9, 0]],
+      [[0, 0], [-12, -120], [12, 120]],
+    ],
+  },
+  // ракеты: медленные и редкие, но сильные; вылетают в стороны и заходят на цель сбоку —
+  // щит щитоносца их не держит
+  rocket: {
+    interval: 0.6,
+    damage: 3,
+    speed: 380,
+    turnRate: 4.5,
+    volleys: [
+      [[14, 0.8]],
+      [[-14, -0.8], [14, 0.8]],
+      [[-14, -0.6], [14, 0.6], [-20, -1.2], [20, 1.2]],
+    ],
+  },
+} as const satisfies Record<string, VolleySpec | BeamSpec | RocketSpec>;
+
+export type WeaponKind = keyof typeof WEAPONS;
+export const WEAPON_KINDS = Object.keys(WEAPONS) as WeaponKind[];
+/** С этим видом начинается партия, пока в ангаре не выбран другой. */
+export const DEFAULT_WEAPON: WeaponKind = 'gun';
+/** Цена вида в ангаре: купленный можно выбрать стартовым. В бою капсулы дают любой вид — так его пробуют до покупки. */
+export const WEAPON_COST: Record<WeaponKind, number> = {
+  gun: 0, // есть у всех с начала
+  spread: 150,
+  pierce: 250,
+  laser: 350,
+  rocket: 450,
 };
+
+/** Оружие игрока: вид и уровень (1…PLAYER.maxWeapon). */
+export interface Weapon {
+  kind: WeaponKind;
+  level: number;
+}
 
 export const ENEMY = {
   scout: {
@@ -97,6 +193,7 @@ export const ENEMY = {
     speed: [45, 60], // × сложность
     trackSpeed: 55, // сдвигается под игрока, но медленнее его
     plateHalf: 16, // полуширина щита снизу: пули ближе к центру отлетают
+    plateY: 20, // низ щита ниже центра на столько — здесь останавливается лазер
   },
   splitter: {
     hp: 3,
@@ -142,13 +239,14 @@ export const BOSS = {
 export const POWER_UP = {
   // шанс выпадения каждого бонуса с обычного врага (в сумме — шанс любого)
   drops: {
-    gun: 0.06,
+    weapon: 0.06, // капсула оружия
     life: 0.03,
     shield: 0.03,
     magnet: 0.025,
     bomb: 0.015,
   },
-  bossLifeChance: 0.5, // с босса всегда бонус: жизнь (если не максимум) или пушка
+  bossLifeChance: 0.5, // с босса всегда бонус: жизнь (если не максимум) или капсула оружия
+  weaponCycle: 2, // вид оружия в летящей капсуле меняется с таким периодом
   fallSpeed: 110,
   points: 50,
   shieldBreakInvuln: 1, // неуязвимость после того, как щит принял удар
@@ -175,7 +273,7 @@ export const UPGRADES = {
     intervalStep: 0.1, // −10% к паузе между выстрелами за уровень
   },
   startWeapon: {
-    costs: [120, 350], // +1 к стартовому уровню пушки
+    costs: [120, 350], // +1 к стартовому уровню оружия, выбранного в ангаре
   },
   extraLife: {
     costs: [80, 260], // +1 жизнь на старте (не больше PLAYER.maxLives)
@@ -225,6 +323,12 @@ export const QUESTS = {
     wave: { target: 5, targetStep: 2, reward: 30, rewardStep: 15 }, // за одну партию
     score: { target: 1500, targetStep: 1500, reward: 30, rewardStep: 15 }, // за одну партию
     combo: { target: 3, targetStep: 1, max: 5, reward: 25, rewardStep: 15 }, // за одну партию, не больше COMBO.maxMultiplier
+    // сбить врагов определённым оружием (за всё время); в бою его даёт капсула, покупать не обязательно
+    spreadKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    pierceKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    laserKills: { target: 30, targetStep: 20, reward: 30, rewardStep: 10 },
+    rocketKills: { target: 20, targetStep: 15, reward: 35, rewardStep: 10 },
+    rocketBoss: { target: 1, targetStep: 1, reward: 50, rewardStep: 25 }, // добить флагмана ракетой
   },
 } as const;
 

@@ -91,6 +91,24 @@ test('пауза не задваивает прогресс', async ({ page }) =
   expect((await savedQuest(page, 'scout'))?.progress).toBe(1);
 });
 
+test('задание на оружие считает только врагов, сбитых этим оружием', async ({ page }) => {
+  const target = QUESTS.kinds.laserKills.target;
+  await openWithSave(page, quests({ kind: 'laserKills', tier: 0, progress: target - 1 }));
+  await launch(page);
+  await setCheats(page, { noDamage: true });
+  await shootScout(page); // пушкой — не в счёт: задание ещё не выполнено
+  await page.getByRole('button', { name: 'Пауза' }).click();
+  expect((await savedQuest(page, 'laserKills'))?.progress).toBe(target - 1);
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await pickUp(page, 'weapon', { weapon: 'laser' });
+  // пули пушки, выпущенные до смены, ещё летят — разведчика должен сбить именно луч
+  await expect.poll(async () => (await snapshot(page)).playerBullets).toBe(0);
+  await shootScout(page);
+  await expect(page.getByRole('status')).toContainText(`Сбей ${target} врагов лазером`);
+  await toMenu(page);
+  expect((await savedQuest(page, 'laserKills'))?.progress).toBe(target);
+});
+
 test('задание «за партию» берёт лучший результат, а не сумму', async ({ page }) => {
   await openWithSave(page, quests({ kind: 'wave', tier: 0, progress: 3 }));
   await launch(page);
@@ -103,8 +121,8 @@ test('задание «за партию» берёт лучший резуль�
 /** Сбить флагмана пушкой третьего уровня (игрок неуязвим); spawn — поставить нового, иначе добить того, что на поле. */
 async function killBoss(page: Page, { spawn = true } = {}) {
   await setCheats(page, { noDamage: true, holdFire: false });
-  await pickUp(page, 'gun');
-  await pickUp(page, 'gun');
+  await pickUp(page, 'weapon');
+  await pickUp(page, 'weapon');
   const { player } = await snapshot(page);
   if (spawn) await spawnEnemy(page, 'mother', player.x, 120);
   await expect

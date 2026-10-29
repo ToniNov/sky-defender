@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackRun } from '../analytics';
 import { startRun, submitScore } from '../api';
 import { unlockAudio } from '../audio';
-import type { QuestKind } from '../game/balance';
+import { DEFAULT_WEAPON, type QuestKind, type Weapon } from '../game/balance';
 import type { Phase } from '../game/Game';
 import type { WorldEvents } from '../game/World';
-import { applyRun, emptyRunStats, questComplete, type Quest, type RunStats } from '../quests';
+import { applyRun, copyRunStats, countKill, emptyRunStats, questComplete, type Quest, type RunStats } from '../quests';
 import { haptic } from '../telegram';
 import type { ProgressStore } from './types';
 
@@ -19,7 +19,7 @@ export function useRun(store: ProgressStore, phase: Phase, setPhase: (phase: Pha
   const [session, setSession] = useState(0);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
-  const [weapon, setWeapon] = useState(1);
+  const [weapon, setWeapon] = useState<Weapon>({ kind: DEFAULT_WEAPON, level: 1 });
   const [combo, setCombo] = useState(1);
   const [coins, setCoins] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
@@ -37,7 +37,7 @@ export function useRun(store: ProgressStore, phase: Phase, setPhase: (phase: Pha
       const run = runRef.current;
       const earned = run.coins - bankedRef.current.coins;
       const quests = applyRun(p.quests, run, bankedRef.current);
-      bankedRef.current = { ...run, kills: { ...run.kills } };
+      bankedRef.current = copyRunStats(run);
       if (earned <= 0 && finalScore <= p.best && JSON.stringify(quests) === JSON.stringify(p.quests)) return;
       store.commit({ best: Math.max(p.best, finalScore), coins: p.coins + earned, quests });
     },
@@ -99,10 +99,9 @@ export function useRun(store: ProgressStore, phase: Phase, setPhase: (phase: Pha
         checkQuests();
       },
       hit: () => haptic.impact('heavy'),
-      kill: (kind) => {
+      kill: (kind, by) => {
         haptic.impact(kind === 'mother' ? 'heavy' : 'light');
-        const { kills } = runRef.current;
-        kills[kind] = (kills[kind] ?? 0) + 1;
+        countKill(runRef.current, kind, by);
         checkQuests();
       },
       bossDown: (flawless) => {

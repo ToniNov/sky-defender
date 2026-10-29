@@ -1,9 +1,10 @@
 import { Sprite, type Container } from 'pixi.js';
-import { COINS, POWER_UP, type PowerUpKind } from '../balance';
-import type { Textures } from '../textures';
+import { COINS, POWER_UP, WEAPON_KINDS, type PowerUpKind, type WeaponKind } from '../balance';
+import { capsuleTexture, type Textures } from '../textures';
 import type { Field } from './Field';
 import type { Player } from './Player';
 import { releaseAll, releaseAt, removeAt, SpritePool } from './pool';
+import { nextWeaponKind } from './rules';
 
 const COIN_DRAG = 3; // разлёт монет босса гаснет за ~1/3 с
 
@@ -11,7 +12,22 @@ export interface PowerUp {
   s: Sprite;
   kind: PowerUpKind;
   t: number;
+  /** Капсула оружия: какой вид даст сейчас. */
+  weapon: WeaponKind;
+  /** Через сколько секунд вид в капсуле сменится (Infinity — не меняется). */
+  cycle: number;
 }
+
+/** Капсула оружия при появлении: вид и меняется ли он в полёте. */
+export interface Capsule {
+  weapon: WeaponKind;
+  cycles: boolean;
+}
+
+const randomCapsule = (): Capsule => ({
+  weapon: WEAPON_KINDS[Math.floor(Math.random() * WEAPON_KINDS.length)],
+  cycles: true,
+});
 export interface Coin {
   s: Sprite;
   vx: number;
@@ -38,12 +54,14 @@ export class Pickups {
     this.coinPool = new SpritePool(textures.coin, layer);
   }
 
-  spawnPowerUp(x: number, y: number, kind: PowerUpKind) {
-    const s = new Sprite(this.tx[kind]);
+  /** capsule — только для капсулы оружия: по умолчанию случайный вид, который меняется в полёте. */
+  spawnPowerUp(x: number, y: number, kind: PowerUpKind, capsule: Capsule = randomCapsule()) {
+    const { weapon, cycles } = capsule;
+    const s = new Sprite(kind === 'weapon' ? this.tx[capsuleTexture(weapon)] : this.tx[kind]);
     s.anchor.set(0.5);
     s.position.set(x, y);
     this.layer.addChild(s);
-    this.powerUps.push({ s, kind, t: 0 });
+    this.powerUps.push({ s, kind, t: 0, weapon, cycle: kind === 'weapon' && cycles ? POWER_UP.weaponCycle : Infinity });
   }
 
   spawnCoin(x: number, y: number, vx = 0, vy = 0) {
@@ -70,7 +88,13 @@ export class Pickups {
       if (magnet) this.pull(p.s, dt);
       else p.s.y += POWER_UP.fallSpeed * dt;
       p.s.scale.set(1 + Math.sin(p.t * 7) * 0.12);
-      if (p.kind === 'gun') p.s.rotation += dt * 2;
+      p.cycle -= dt;
+      if (p.cycle <= 0) {
+        // капсула сменила вид — можно поймать нужный
+        p.cycle += POWER_UP.weaponCycle;
+        p.weapon = nextWeaponKind(p.weapon);
+        p.s.texture = this.tx[capsuleTexture(p.weapon)];
+      }
       if (p.s.y > h + 30) this.removePowerUp(i);
     }
 

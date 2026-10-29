@@ -67,9 +67,16 @@ describe('события', () => {
     expect(sent[0]).toMatchObject({ type: 'launch', version, platform: 'web' });
   });
 
-  it('конец партии — очки, волна, целые секунды и чем сбит', async () => {
+  it('конец партии — очки, волна, целые секунды, чем сбит и оружие', async () => {
     const { runEvent } = await load();
-    expect(runEvent('abcdefgh', 1200, 4, { cause: 'kamikaze', seconds: 83.6 })).toEqual({
+    const death = {
+      cause: 'kamikaze',
+      seconds: 83.6,
+      weapon: { kind: 'laser', level: 2 },
+      startWeapon: 'gun',
+      mainWeapon: 'rocket',
+    } as const;
+    expect(runEvent('abcdefgh', 1200, 4, death)).toEqual({
       type: 'run',
       device: 'abcdefgh',
       version,
@@ -78,6 +85,10 @@ describe('события', () => {
       wave: 4,
       seconds: 84,
       cause: 'kamikaze',
+      weapon: 'laser',
+      weaponLevel: 2,
+      startWeapon: 'gun',
+      mainWeapon: 'rocket',
     });
   });
 });

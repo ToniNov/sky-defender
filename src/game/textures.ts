@@ -1,7 +1,8 @@
-import { Graphics, type Renderer, type Texture } from 'pixi.js';
-import { SKIN_NAMES, type SkinName } from './balance';
+import { Container, Graphics, Text, type Renderer, type Texture } from 'pixi.js';
+import { SKIN_NAMES, WEAPON_KINDS, type SkinName, type WeaponKind } from './balance';
 import type { ShipTextures } from './ships';
 import { skinSvg } from './skins';
+import { WEAPON_LOOK } from './weaponLook';
 
 /**
  * Вся графика игры рисуется векторно через Graphics и один раз
@@ -12,10 +13,21 @@ import { skinSvg } from './skins';
 export type PlaneTextureName = `plane_${SkinName}`;
 export const planeTexture = (skin: SkinName): PlaneTextureName => `plane_${skin}`;
 
+const CAPSULE_LETTER_COLOR = 0x1a1030;
+
+/** Капсула оружия каждого вида: capsule_gun, capsule_spread… */
+export type CapsuleTextureName = `capsule_${WeaponKind}`;
+export const capsuleTexture = (kind: WeaponKind): CapsuleTextureName => `capsule_${kind}`;
+
 export type TextureName =
   | PlaneTextureName
+  | CapsuleTextureName
   | 'flame'
   | 'bullet'
+  | 'beam'
+  | 'rocket'
+  | 'pellet'
+  | 'needle'
   | 'enemyBullet'
   | 'missile'
   | 'scout'
@@ -27,7 +39,6 @@ export type TextureName =
   | 'mini'
   | 'spark'
   | 'star'
-  | 'gun'
   | 'life'
   | 'shield'
   | 'magnet'
@@ -51,9 +62,32 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     SKIN_NAMES.map((skin) => [planeTexture(skin), bake((g) => g.svg(skinSvg(skin)))]),
   ) as Record<PlaneTextureName, Texture>;
 
+  // Капсула оружия: таблетка цвета вида с буквой
+  const capsules = Object.fromEntries(
+    WEAPON_KINDS.map((kind) => {
+      const { color, letter } = WEAPON_LOOK[kind];
+      const c = new Container();
+      const g = new Graphics();
+      g.circle(16, 16, 16).fill({ color, alpha: 0.25 });
+      g.roundRect(3, 7, 26, 18, 9).fill(color);
+      g.roundRect(6, 9, 20, 5, 2.5).fill({ color: 0xffffff, alpha: 0.45 });
+      const t = new Text({
+        text: letter,
+        style: { fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: '900', fill: CAPSULE_LETTER_COLOR },
+      });
+      t.anchor.set(0.5);
+      t.position.set(16, 16.5);
+      c.addChild(g, t);
+      const texture = renderer.generateTexture({ target: c, resolution: 3, antialias: true });
+      c.destroy({ children: true });
+      return [capsuleTexture(kind), texture];
+    }),
+  ) as Record<CapsuleTextureName, Texture>;
+
   return {
     // Самолёты игрока (носом вверх, ~60×58) — рисунки в skins.ts
     ...planes,
+    ...capsules,
 
     flame: bake((g) => {
       g.poly([0, 0, 10, 0, 5, 18]).fill(0xff8a00);
@@ -63,6 +97,39 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
     bullet: bake((g) => {
       g.roundRect(0, 0, 6, 18, 3).fill(0xffd23f);
       g.roundRect(1.5, 2, 3, 13, 1.5).fill(0xffffff);
+    }),
+
+    // Дробина веера: маленькая и круглая
+    pellet: bake((g) => {
+      const { color } = WEAPON_LOOK.spread;
+      g.circle(5, 5, 5).fill({ color, alpha: 0.35 });
+      g.circle(5, 5, 3.2).fill(color);
+      g.circle(4.2, 4.2, 1.4).fill(0xffffff);
+    }),
+
+    // Игла — пробивающая пуля: длинная и тонкая
+    needle: bake((g) => {
+      const { color } = WEAPON_LOOK.pierce;
+      g.roundRect(0, 0, 5, 24, 2.5).fill({ color, alpha: 0.5 });
+      g.poly([2.5, 0, 4, 6, 4, 22, 1, 22, 1, 6]).fill(color);
+      g.rect(2, 3, 1, 17).fill(0xffffff);
+    }),
+
+    // Ракета игрока (носом вверх) с огоньком сзади
+    rocket: bake((g) => {
+      const { color } = WEAPON_LOOK.rocket;
+      g.poly([5, 18, 7, 24, 9, 18]).fill(0xffe066);
+      g.poly([1, 18, 3, 13, 11, 13, 13, 18]).fill(color);
+      g.roundRect(4, 4, 6, 15, 2).fill(0xf2f2f2);
+      g.poly([4, 5, 7, 0, 10, 5]).fill(color);
+    }),
+
+    // Луч лазера в разрезе: свечение, луч, белая сердцевина. Растягивается по высоте
+    beam: bake((g) => {
+      const { color } = WEAPON_LOOK.laser;
+      g.rect(0, 0, 24, 4).fill({ color, alpha: 0.25 });
+      g.rect(6, 0, 12, 4).fill({ color, alpha: 0.8 });
+      g.rect(10, 0, 4, 4).fill(0xffffff);
     }),
 
     enemyBullet: bake((g) => {
@@ -162,13 +229,6 @@ export function makeTextures(renderer: Renderer, ships: ShipTextures = {}): Text
 
     star: bake((g) => {
       g.circle(2, 2, 2).fill(0xffffff);
-    }),
-
-    // Бонус: усиление пушки
-    gun: bake((g) => {
-      g.circle(14, 14, 14).fill({ color: 0xffd23f, alpha: 0.25 });
-      g.star(14, 14, 5, 11, 5).fill(0xffd23f);
-      g.star(14, 14, 5, 6, 2.6).fill(0xffffff);
     }),
 
     // Бонус: дополнительная жизнь

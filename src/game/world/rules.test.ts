@@ -1,21 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { COMBO, DIFFICULTY_TIME, ENEMY, NO_UPGRADES, PLAYER, POWER_UP, UPGRADES } from '../balance';
+import { COMBO, DIFFICULTY_TIME, ENEMY, NO_UPGRADES, PLAYER, POWER_UP, UPGRADES, WEAPON_KINDS, WEAPONS, type Weapon } from '../balance';
 import {
   addLife,
+  beamTop,
   bossAttackAt,
   bossDrop,
   bossHp,
   comboMultiplier,
   difficulty,
+  fireInterval,
+  inBeam,
   killScore,
+  loseWeaponLevel,
+  mainWeapon,
   near,
+  nearest,
+  nextWeaponKind,
+  pickWeapon,
   rollDrop,
   shieldBlocks,
   startStats,
   takeHit,
   turnToward,
-  upgradeWeapon,
 } from './rules';
+
+const gun = (level: number): Weapon => ({ kind: 'gun', level });
+const spread = (level: number): Weapon => ({ kind: 'spread', level });
 
 describe('столкновения', () => {
   it('near: касание кругов по сумме радиусов', () => {
@@ -34,27 +44,120 @@ describe('столкновения', () => {
 
 describe('попадание в игрока', () => {
   it('щит принимает удар целиком', () => {
-    expect(takeHit({ lives: 3, weapon: 3, shield: true, combo: 12 })).toEqual({
+    expect(takeHit({ lives: 3, weapon: gun(3), shield: true, combo: 12 })).toEqual({
       lives: 3,
-      weapon: 3,
+      weapon: gun(3),
       shield: false,
       combo: 12,
       absorbed: true,
     });
   });
 
-  it('без щита — минус жизнь, минус уровень пушки, комбо с нуля', () => {
-    expect(takeHit({ lives: 3, weapon: 3, shield: false, combo: 12 })).toEqual({
+  it('без щита — минус жизнь, минус уровень оружия, комбо с нуля', () => {
+    expect(takeHit({ lives: 3, weapon: gun(3), shield: false, combo: 12 })).toEqual({
       lives: 2,
-      weapon: 2,
+      weapon: gun(2),
       shield: false,
       combo: 0,
       absorbed: false,
     });
   });
 
-  it('пушка не опускается ниже первого уровня', () => {
-    expect(takeHit({ lives: 2, weapon: 1, shield: false, combo: 0 }).weapon).toBe(1);
+  it('оружие не опускается ниже первого уровня', () => {
+    expect(takeHit({ lives: 2, weapon: gun(1), shield: false, combo: 0 }).weapon).toEqual(gun(1));
+  });
+});
+
+describe('оружие', () => {
+  it('тот же вид — уровень +1, но не выше максимума', () => {
+    expect(pickWeapon(gun(1), 'gun')).toEqual(gun(2));
+    expect(pickWeapon(gun(PLAYER.maxWeapon), 'gun')).toEqual(gun(PLAYER.maxWeapon));
+  });
+
+  it('другой вид — смена вида, уровень сохраняется', () => {
+    expect(pickWeapon(spread(2), 'gun')).toEqual(gun(2));
+    expect(pickWeapon(gun(PLAYER.maxWeapon), 'spread')).toEqual(spread(PLAYER.maxWeapon));
+  });
+
+  it('капсула перебирает все виды по кругу', () => {
+    let kind = WEAPON_KINDS[0];
+    const seen = new Set([kind]);
+    for (let i = 1; i < WEAPON_KINDS.length; i++) seen.add((kind = nextWeaponKind(kind)));
+    expect(seen.size).toBe(WEAPON_KINDS.length);
+    expect(nextWeaponKind(kind)).toBe(WEAPON_KINDS[0]);
+  });
+
+  it('при уроне теряется уровень, вид остаётся', () => {
+    expect(loseWeaponLevel(spread(3))).toEqual(spread(2));
+    expect(loseWeaponLevel(spread(1))).toEqual(spread(1));
+  });
+
+  it('у каждого вида залп или луч на каждый уровень', () => {
+    for (const kind of WEAPON_KINDS) {
+      const spec = WEAPONS[kind];
+      const levels = 'beam' in spec ? spec.beam : 'volleys' in spec ? spec.volleys : spec.patterns;
+      expect(levels).toHaveLength(PLAYER.maxWeapon);
+    }
+  });
+
+  it('пауза между залпами — от вида и скорострельности', () => {
+    expect(fireInterval(gun(1), 1)).toBe(WEAPONS.gun.interval);
+    expect(fireInterval(gun(3), 0.8)).toBeCloseTo(WEAPONS.gun.interval * 0.8);
+  });
+});
+
+describe('основное оружие партии', () => {
+  it('то, с которым провели больше всего времени', () => {
+    expect(mainWeapon({ gun: 10, laser: 25, rocket: 5 }, 'gun')).toBe('laser');
+  });
+
+  it('без смен оружия — стартовое', () => {
+    expect(mainWeapon({}, 'spread')).toBe('spread');
+  });
+
+  it('при равенстве остаётся стартовое', () => {
+    expect(mainWeapon({ gun: 10, pierce: 10 }, 'pierce')).toBe('pierce');
+  });
+});
+
+describe('цель ракеты', () => {
+  it('ближайшая к ракете', () => {
+    const far = { x: 0, y: 0 };
+    const close = { x: 90, y: 110 };
+    expect(nearest({ x: 100, y: 100 }, [far, close])).toBe(close);
+  });
+
+  it('без целей — null', () => {
+    expect(nearest({ x: 0, y: 0 }, [])).toBeNull();
+  });
+});
+
+describe('луч лазера', () => {
+  const { plateHalf, plateY } = ENEMY.shielder;
+
+  it('без щитоносцев уходит до заданного верха', () => {
+    expect(beamTop(100, 600, [], -40)).toBe(-40);
+  });
+
+  it('упирается в щит ближайшего щитоносца над самолётом', () => {
+    const shielders = [
+      { x: 100, y: 100 },
+      { x: 105, y: 300 }, // ближе к самолёту — он и держит луч
+      { x: 100, y: 700 }, // ниже самолёта — не мешает
+    ];
+    expect(beamTop(100, 600, shielders, -40)).toBe(300 + plateY);
+  });
+
+  it('щитоносца сбоку от луча не замечает', () => {
+    expect(beamTop(100, 600, [{ x: 100 + plateHalf, y: 300 }], -40)).toBe(-40);
+  });
+
+  it('задевает круг, если тот касается полосы луча', () => {
+    const beam = { x: 100, half: 5, top: 200, bottom: 600 };
+    expect(inBeam(beam, { x: 120, y: 400 }, 16)).toBe(true);
+    expect(inBeam(beam, { x: 122, y: 400 }, 16)).toBe(false); // сбоку
+    expect(inBeam(beam, { x: 100, y: 180 }, 16)).toBe(false); // за щитом
+    expect(inBeam(beam, { x: 100, y: 620 }, 16)).toBe(false); // позади самолёта
   });
 });
 
@@ -83,11 +186,11 @@ describe('очки и комбо', () => {
 
 describe('бонусы', () => {
   it('rollDrop раскладывает [0, 1) по шансам из POWER_UP.drops', () => {
-    const { gun, life } = POWER_UP.drops;
-    expect(rollDrop(0)).toBe('gun');
-    expect(rollDrop(gun - 1e-9)).toBe('gun');
-    expect(rollDrop(gun)).toBe('life');
-    expect(rollDrop(gun + life)).toBe('shield');
+    const { weapon, life } = POWER_UP.drops;
+    expect(rollDrop(0)).toBe('weapon');
+    expect(rollDrop(weapon - 1e-9)).toBe('weapon');
+    expect(rollDrop(weapon)).toBe('life');
+    expect(rollDrop(weapon + life)).toBe('shield');
     expect(rollDrop(0.999)).toBeNull(); // чаще всего не выпадает ничего
   });
 
@@ -99,15 +202,13 @@ describe('бонусы', () => {
     expect(dropped / n).toBeCloseTo(total, 3);
   });
 
-  it('с босса — жизнь, если есть куда и повезло, иначе пушка', () => {
+  it('с босса — жизнь, если есть куда и повезло, иначе капсула оружия', () => {
     expect(bossDrop(3, 0)).toBe('life');
-    expect(bossDrop(3, 0.99)).toBe('gun');
-    expect(bossDrop(PLAYER.maxLives, 0)).toBe('gun');
+    expect(bossDrop(3, 0.99)).toBe('weapon');
+    expect(bossDrop(PLAYER.maxLives, 0)).toBe('weapon');
   });
 
-  it('пушка и жизни не выше максимума', () => {
-    expect(upgradeWeapon(1)).toBe(2);
-    expect(upgradeWeapon(PLAYER.maxWeapon)).toBe(PLAYER.maxWeapon);
+  it('жизни не выше максимума', () => {
     expect(addLife(3)).toBe(4);
     expect(addLife(PLAYER.maxLives)).toBe(PLAYER.maxLives);
   });
@@ -117,18 +218,22 @@ describe('старт партии', () => {
   it('без улучшений — значения из balance.ts', () => {
     expect(startStats(NO_UPGRADES)).toEqual({
       lives: PLAYER.startLives,
-      weapon: 1,
-      fireInterval: PLAYER.fireInterval,
+      weapon: gun(1),
+      reload: 1,
       magnetTime: POWER_UP.magnetTime,
     });
   });
 
   it('улучшения из ангара, жизни и пушка не выше максимума', () => {
     const s = startStats({ fireRate: 2, startWeapon: 9, extraLife: 9, magnet: 1 });
-    expect(s.weapon).toBe(PLAYER.maxWeapon);
+    expect(s.weapon).toEqual(gun(PLAYER.maxWeapon));
     expect(s.lives).toBe(PLAYER.maxLives);
-    expect(s.fireInterval).toBeCloseTo(PLAYER.fireInterval * (1 - 2 * UPGRADES.fireRate.intervalStep));
+    expect(s.reload).toBeCloseTo(1 - 2 * UPGRADES.fireRate.intervalStep);
     expect(s.magnetTime).toBe(POWER_UP.magnetTime + UPGRADES.magnet.timeStep);
+  });
+
+  it('оружие из ангара — с уровнем от улучшения «стартовое оружие»', () => {
+    expect(startStats({ ...NO_UPGRADES, startWeapon: 1 }, 'laser').weapon).toEqual({ kind: 'laser', level: 2 });
   });
 });
 

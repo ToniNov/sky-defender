@@ -1,8 +1,12 @@
+import type { CSSProperties } from 'react';
+import { PLAYER, type Weapon } from '../game/balance';
+import { WEAPON_LOOK, weaponCssColor } from '../game/weaponLook';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Heart } from '../ui/Heart';
 import { SoundButton } from '../ui/SoundButton';
+import { WeaponBadge } from '../ui/WeaponBadge';
 
-/** Полоса сверху в бою: очки, комбо, пушка, монеты, жизни, звук и пауза. */
+/** Полоса сверху в бою: очки, комбо, оружие, монеты, жизни, звук и пауза. */
 export function Hud({
   score,
   combo,
@@ -15,13 +19,14 @@ export function Hud({
 }: {
   score: number;
   combo: number;
-  weapon: number;
+  weapon: Weapon;
   coins: number;
   lives: number;
   soundOn: boolean;
   onToggleSound: () => void;
   onPause: () => void;
 }) {
+  const look = WEAPON_LOOK[weapon.kind];
   return (
     <header className="hud">
       <div className="hud-score">
@@ -35,9 +40,15 @@ export function Hud({
             </span>
           )}
         </span>
-        <span className="hud-weapon" aria-label={`Пушка: уровень ${weapon}`}>
-          {[1, 2, 3].map((n) => (
-            <i key={n} className={n <= weapon ? 'on' : ''} />
+        <span
+          className="hud-weapon"
+          style={{ '--weapon': weaponCssColor(weapon.kind) } as CSSProperties}
+          aria-label={`Оружие: ${look.label.toLowerCase()}, уровень ${weapon.level}`}
+        >
+          {/* key меняется с видом — значок заново проигрывает анимацию */}
+          <WeaponBadge key={weapon.kind} kind={weapon.kind} className="pop" />
+          {Array.from({ length: PLAYER.maxWeapon }, (_, i) => (
+            <i key={i} className={i < weapon.level ? 'on' : ''} />
           ))}
         </span>
         <span className="hud-coins" aria-label={`Монеты за партию: ${coins}`}>

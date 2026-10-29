@@ -2,6 +2,8 @@ import type { QuestKind } from '../game/balance';
 import { questTarget, type Quest } from '../quests';
 import { plural } from './plural';
 
+const enemies = (n: number) => plural(n, 'врага', 'врагов', 'врагов');
+
 const QUEST_TITLE: Record<QuestKind, (n: number) => string> = {
   scout: (n) => `Сбей ${n} ${plural(n, 'разведчика', 'разведчиков', 'разведчиков')}`,
   saucer: (n) => `Сбей ${n} ${plural(n, 'тарелку', 'тарелки', 'тарелок')}`,
@@ -16,6 +18,11 @@ const QUEST_TITLE: Record<QuestKind, (n: number) => string> = {
   wave: (n) => `Дойди до волны ${n} за партию`,
   score: (n) => `Набери ${n} ${plural(n, 'очко', 'очка', 'очков')} за партию`,
   combo: (n) => `Разгони комбо до ×${n}`,
+  spreadKills: (n) => `Сбей ${n} ${enemies(n)} веером`,
+  pierceKills: (n) => `Сбей ${n} ${enemies(n)} иглами`,
+  laserKills: (n) => `Сбей ${n} ${enemies(n)} лазером`,
+  rocketKills: (n) => `Сбей ${n} ${enemies(n)} ракетами`,
+  rocketBoss: (n) => `${n === 1 ? 'Сбей флагмана' : `Сбей ${n} ${plural(n, 'флагмана', 'флагманов', 'флагманов')}`} ракетами`,
 };
 
 /** Подпись задания: в списке заданий и во всплывашке в бою. */

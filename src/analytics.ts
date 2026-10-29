@@ -1,6 +1,6 @@
 /**
- * Аналитика: запуски игры и итоги партий (очки, волна, длительность, чем сбит) → api.ts → POST /api/events.
- * Игрок — случайный анонимный id устройства, не Telegram-id. Смотреть: npm run api:stats и api:deaths.
+ * Аналитика: запуски игры и итоги партий (очки, волна, длительность, чем сбит, оружие) → api.ts → POST /api/events.
+ * Игрок — случайный анонимный id устройства, не Telegram-id. Смотреть: npm run api:stats, api:deaths и api:weapons.
  */
 import { version } from '../package.json';
 import { type AnalyticsEvent, sendEvent } from './api';
@@ -30,7 +30,21 @@ function deviceId(): string {
 
 /** Событие конца партии: секунды — целые, остальное как есть. */
 export function runEvent(device: string, score: number, wave: number, death: Death): AnalyticsEvent {
-  return { type: 'run', device, version, platform, score, wave, seconds: Math.round(death.seconds), cause: death.cause };
+  const { cause, weapon, startWeapon, mainWeapon } = death;
+  return {
+    type: 'run',
+    device,
+    version,
+    platform,
+    score,
+    wave,
+    seconds: Math.round(death.seconds),
+    cause,
+    weapon: weapon.kind,
+    weaponLevel: weapon.level,
+    startWeapon,
+    mainWeapon,
+  };
 }
 
 /** Игра открылась. Вызывать один раз при запуске. */

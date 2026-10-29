@@ -1,16 +1,26 @@
 import { useState } from 'react';
-import { SKIN_NAMES, SKINS, UPGRADE_NAMES, UPGRADES, upgradeMax, type SkinName, type UpgradeName } from '../game/balance';
+import {
+  SKIN_NAMES,
+  SKINS,
+  UPGRADE_NAMES,
+  UPGRADES,
+  upgradeMax,
+  type SkinName,
+  type UpgradeName,
+  type WeaponKind,
+} from '../game/balance';
 import { skinImage } from '../game/ships';
 import type { Progress } from '../progress';
 import { CoinIcon } from '../ui/CoinIcon';
 import { Screen } from '../ui/Screen';
+import { WeaponGrid } from './WeaponGrid';
 
 const UPGRADE_INFO: Record<UpgradeName, { title: string; effect: (level: number) => string }> = {
   fireRate: {
     title: 'Скорострельность',
     effect: (l) => `+${Math.round((1 / (1 - UPGRADES.fireRate.intervalStep * l) - 1) * 100)}% выстрелов`,
   },
-  startWeapon: { title: 'Стартовая пушка', effect: (l) => `уровень ${1 + l} с начала боя` },
+  startWeapon: { title: 'Стартовое оружие', effect: (l) => `уровень ${1 + l} с начала боя` },
   extraLife: { title: 'Запасная жизнь', effect: (l) => `+${l} к жизням на старте` },
   magnet: { title: 'Сильный магнит', effect: (l) => `+${l * UPGRADES.magnet.timeStep} с действия` },
 };
@@ -29,14 +39,16 @@ export function HangarScreen({
   progress,
   onBuy,
   onPickSkin,
+  onPickWeapon,
   onClose,
 }: {
   progress: Progress;
   onBuy: (name: UpgradeName) => void;
   onPickSkin: (skin: SkinName) => void;
+  onPickWeapon: (kind: WeaponKind) => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<'upgrades' | 'skins'>('upgrades');
+  const [tab, setTab] = useState<'upgrades' | 'weapons' | 'skins'>('upgrades');
   return (
     <Screen>
       <h2 className="title small">Ангар</h2>
@@ -48,12 +60,17 @@ export function HangarScreen({
         <button role="tab" aria-selected={tab === 'upgrades'} onClick={() => setTab('upgrades')}>
           Улучшения
         </button>
+        <button role="tab" aria-selected={tab === 'weapons'} onClick={() => setTab('weapons')}>
+          Оружие
+        </button>
         <button role="tab" aria-selected={tab === 'skins'} onClick={() => setTab('skins')}>
           Скины
         </button>
       </div>
       {tab === 'skins' ? (
         <SkinGrid progress={progress} onPick={onPickSkin} />
+      ) : tab === 'weapons' ? (
+        <WeaponGrid weapons={progress.weapons} coins={progress.coins} onPick={onPickWeapon} />
       ) : (
         <UpgradeList progress={progress} onBuy={onBuy} />
       )}

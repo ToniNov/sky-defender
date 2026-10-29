@@ -18,6 +18,7 @@
     "api:errors": "wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command \"SELECT datetime(last_seen / 1000, 'unixepoch') AS last, count, version, platform, message, substr(stack, 1, 300) AS stack FROM errors ORDER BY last_seen DESC LIMIT 20\"",
     "api:stats": "wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command \"SELECT date(at / 1000, 'unixepoch') AS day, SUM(type = 'launch') AS launches, COUNT(DISTINCT device) AS players, SUM(type = 'run') AS runs, ROUND(AVG(seconds)) AS avg_sec, ROUND(AVG(score)) AS avg_score, MAX(score) AS best, ROUND(AVG(wave), 1) AS avg_wave FROM events WHERE at > (unixepoch() - 14 * 86400) * 1000 GROUP BY day ORDER BY day DESC\"",
     "api:deaths": "wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command \"SELECT wave, cause, COUNT(*) AS deaths, ROUND(AVG(seconds)) AS avg_sec FROM events WHERE type = 'run' AND at > (unixepoch() - 7 * 86400) * 1000 GROUP BY wave, cause ORDER BY wave, deaths DESC LIMIT 60\"",
+    "api:weapons": "wrangler d1 execute sky-defender --remote -c worker/wrangler.toml --command \"SELECT main_weapon, start_weapon, COUNT(*) AS runs, ROUND(AVG(seconds)) AS avg_sec, ROUND(AVG(score)) AS avg_score, ROUND(AVG(wave), 1) AS avg_wave FROM events WHERE type = 'run' AND main_weapon IS NOT NULL AND at > (unixepoch() - 7 * 86400) * 1000 GROUP BY main_weapon, start_weapon ORDER BY avg_sec DESC\"",
     "api:migrate:local": "wrangler d1 migrations apply sky-defender --local -c worker/wrangler.toml"
   },
   "dependencies": {

@@ -37,8 +37,15 @@ export function spawnEnemy(page: Page, kind: string, x: number, y: number) {
   return page.evaluate(([k, ex, ey]) => window.__world!.spawnEnemy(k, ex, ey), [kind, x, y] as const);
 }
 
-export function spawnPowerUp(page: Page, kind: string, x: number, y: number) {
-  return page.evaluate(([k, px, py]) => window.__world!.spawnPowerUp(k, px, py), [kind, x, y] as const);
+/** capsule — для капсулы оружия: вид (по умолчанию текущий у игрока) и меняется ли он в полёте. */
+export function spawnPowerUp(
+  page: Page,
+  kind: string,
+  x: number,
+  y: number,
+  capsule: { weapon?: string; cycles?: boolean } = {},
+) {
+  return page.evaluate(([k, px, py, c]) => window.__world!.spawnPowerUp(k, px, py, c), [kind, x, y, capsule] as const);
 }
 
 export function movePlayer(page: Page, x: number, y: number) {
@@ -56,10 +63,10 @@ export async function setCheats(page: Page, cheats: { noDamage?: boolean; holdFi
 }
 
 /** Положить бонус прямо на самолёт и дождаться, пока его подберут. */
-export async function pickUp(page: Page, kind: string) {
+export async function pickUp(page: Page, kind: string, capsule: { weapon?: string } = {}) {
   // ждём очки за подбор, а не пустое поле: сбитые бомбой враги сами могут уронить бонус
   const { player, score } = await snapshot(page);
-  await spawnPowerUp(page, kind, player.x, player.y);
+  await spawnPowerUp(page, kind, player.x, player.y, capsule);
   await expect.poll(async () => (await snapshot(page)).score).toBeGreaterThanOrEqual(score + POWER_UP.points);
 }
 

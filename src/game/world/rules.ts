@@ -1,13 +1,18 @@
 import {
   COMBO,
+  DEFAULT_WEAPON,
   DIFFICULTY_TIME,
   ENEMY,
   PLAYER,
   POWER_UP,
   UPGRADES,
+  WEAPON_KINDS,
+  WEAPONS,
   type EnemyKind,
   type PowerUpKind,
   type Upgrades,
+  type Weapon,
+  type WeaponKind,
 } from '../balance';
 
 /**
@@ -35,27 +40,77 @@ export const near = (a: Point, b: Point, d: number) => {
 };
 
 /** С чем игрок начинает партию с учётом улучшений из ангара. */
-export function startStats(upgrades: Upgrades) {
+export function startStats(upgrades: Upgrades, weapon: WeaponKind = DEFAULT_WEAPON) {
   return {
     lives: Math.min(PLAYER.maxLives, PLAYER.startLives + upgrades.extraLife),
-    weapon: Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon),
-    fireInterval: PLAYER.fireInterval * (1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate),
+    weapon: { kind: weapon, level: Math.min(PLAYER.maxWeapon, 1 + upgrades.startWeapon) } satisfies Weapon,
+    /** Множитель паузы между залпами от улучшения скорострельности. */
+    reload: 1 - UPGRADES.fireRate.intervalStep * upgrades.fireRate,
     magnetTime: POWER_UP.magnetTime + UPGRADES.magnet.timeStep * upgrades.magnet,
   };
 }
 
+/** Пауза между залпами: своя у каждого вида, короче с улучшением скорострельности. */
+export const fireInterval = (weapon: Weapon, reload: number) => WEAPONS[weapon.kind].interval * reload;
+
+/** Луч лазера: полоса шириной 2 × half от самолёта (bottom) вверх до top. */
+export interface Beam {
+  x: number;
+  half: number;
+  top: number;
+  bottom: number;
+}
+
+/** Где кончается луч: на щите ближайшего щитоносца над самолётом, иначе на top (за верхом экрана). */
+export function beamTop(x: number, bottom: number, shielders: readonly Point[], top: number) {
+  for (const s of shielders) {
+    const plate = s.y + ENEMY.shielder.plateY;
+    if (plate < bottom && plate > top && Math.abs(x - s.x) < ENEMY.shielder.plateHalf) top = plate;
+  }
+  return top;
+}
+
+/** Задевает ли луч круг с центром p и радиусом r. */
+export const inBeam = (b: Beam, p: Point, r: number) =>
+  Math.abs(p.x - b.x) < b.half + r && p.y + r > b.top && p.y - r < b.bottom;
+
+/** Вид, с которым провели больше всего времени (seconds — секунды по видам). При равенстве — первый по WEAPON_KINDS. */
+export function mainWeapon(seconds: Partial<Record<WeaponKind, number>>, fallback: WeaponKind): WeaponKind {
+  let best = fallback;
+  let bestT = seconds[fallback] ?? 0;
+  for (const kind of WEAPON_KINDS) {
+    const t = seconds[kind] ?? 0;
+    if (t > bestT) {
+      best = kind;
+      bestT = t;
+    }
+  }
+  return best;
+}
+
+/** Подобрано оружие kind: тот же вид — уровень +1 (не выше максимума), другой — смена вида с тем же уровнем. */
+export const pickWeapon = (weapon: Weapon, kind: WeaponKind): Weapon =>
+  kind === weapon.kind ? { kind, level: Math.min(PLAYER.maxWeapon, weapon.level + 1) } : { kind, level: weapon.level };
+
+/** Следующий вид оружия в капсуле: по кругу WEAPON_KINDS. */
+export const nextWeaponKind = (kind: WeaponKind): WeaponKind =>
+  WEAPON_KINDS[(WEAPON_KINDS.indexOf(kind) + 1) % WEAPON_KINDS.length];
+
+/** Урон по игроку: вид остаётся, уровень −1, но не ниже первого. */
+export const loseWeaponLevel = (weapon: Weapon): Weapon => ({ kind: weapon.kind, level: Math.max(1, weapon.level - 1) });
+
 export interface Pilot {
   lives: number;
-  weapon: number;
+  weapon: Weapon;
   shield: boolean;
   /** Врагов сбито подряд без урона. */
   combo: number;
 }
 
-/** Попадание в игрока: щит принимает удар целиком, иначе −жизнь, −уровень пушки и комбо с нуля. */
+/** Попадание в игрока: щит принимает удар целиком, иначе −жизнь, −уровень оружия и комбо с нуля. */
 export function takeHit(p: Pilot): Pilot & { absorbed: boolean } {
   if (p.shield) return { ...p, shield: false, absorbed: true };
-  return { lives: p.lives - 1, weapon: Math.max(1, p.weapon - 1), shield: false, combo: 0, absorbed: false };
+  return { lives: p.lives - 1, weapon: loseWeaponLevel(p.weapon), shield: false, combo: 0, absorbed: false };
 }
 
 /** Множитель очков за врагов: +1 за каждые COMBO.killsPerStep подряд, не больше максимума. */
@@ -80,11 +135,10 @@ export function rollDrop(r: number): PowerUpKind | null {
   return null;
 }
 
-/** Бонус с босса всегда есть: жизнь (с шансом, если есть куда) или пушка. */
+/** Бонус с босса всегда есть: жизнь (с шансом, если есть куда) или капсула оружия. */
 export const bossDrop = (lives: number, r: number): PowerUpKind =>
-  lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'gun';
+  lives < PLAYER.maxLives && r < POWER_UP.bossLifeChance ? 'life' : 'weapon';
 
-export const upgradeWeapon = (weapon: number) => Math.min(PLAYER.maxWeapon, weapon + 1);
 export const addLife = (lives: number) => Math.min(PLAYER.maxLives, lives + 1);
 
 /** HP флагмана растёт со временем партии. */
@@ -94,6 +148,20 @@ export const bossHp = (elapsed: number) =>
 /** Щитоносец неуязвим снизу по центру: такая пуля отлетает, бить надо по краям. */
 export const shieldBlocks = (bullet: Point, shielder: Point) =>
   bullet.y > shielder.y && Math.abs(bullet.x - shielder.x) < ENEMY.shielder.plateHalf;
+
+/** Ближайшая к p цель; null, если целей нет. Ракеты игрока доворачивают на неё. */
+export function nearest<T extends Point>(p: Point, targets: readonly T[]): T | null {
+  let best: T | null = null;
+  let bestD = Infinity;
+  for (const t of targets) {
+    const d = (t.x - p.x) ** 2 + (t.y - p.y) ** 2;
+    if (d < bestD) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
 
 /** Повернуть угол к цели, но не больше чем на maxTurn — так от самонаводящегося снаряда можно увернуться. */
 export function turnToward(angle: number, target: number, maxTurn: number) {

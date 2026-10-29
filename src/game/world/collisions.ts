@@ -1,10 +1,13 @@
-import { ENEMY, PLAYER, type EnemyKind } from '../balance';
+import { ENEMY, PLAYER, type EnemyKind, type WeaponKind } from '../balance';
 import type { Enemies, Enemy } from './Enemies';
 import type { Field } from './Field';
 import type { Pickups } from './Pickups';
 import type { Player } from './Player';
 import type { Projectiles } from './Projectiles';
-import { near, shieldBlocks } from './rules';
+import { beamTop, inBeam, near, shieldBlocks } from './rules';
+
+/** Чем игрок сбил врага: оружием или бомбой. */
+export type Killer = WeaponKind | 'bomb';
 
 /** Что попало в игрока: пуля, ракета босса или враг, который протаранил (его вид). */
 export type HitCause = 'bullet' | 'missile' | EnemyKind;
@@ -19,10 +22,12 @@ export interface Battle {
   readonly shots: Projectiles;
   readonly enemies: Enemies;
   readonly pickups: Pickups;
-  damageEnemy(e: Enemy, x: number, y: number): void;
+  /** Оружие игрока kind попало во врага в точке (x, y). */
+  damageEnemy(e: Enemy, x: number, y: number, damage: number, kind: WeaponKind): void;
   /** Пуля отлетела от щита щитоносца. */
   deflect(x: number, y: number): void;
-  destroyEnemy(e: Enemy, byPlayer: boolean): void;
+  /** by — чем сбил игрок; null — враг разбился о самолёт. */
+  destroyEnemy(e: Enemy, by: Killer | null): void;
   damagePlayer(cause: HitCause): void;
   /** Подобрать монету i (до вызова coinsPicked может быть несколько). */
   pickCoin(i: number): void;
@@ -37,11 +42,18 @@ export function collide(b: Battle) {
   for (let i = shots.bullets.length - 1; i >= 0; i--) {
     const bullet = shots.bullets[i];
     for (const e of enemies.list) {
-      if (!near(bullet.s, e.s, bullet.r + e.r)) continue;
+      if (!near(bullet.s, e.s, bullet.r + e.r) || bullet.hit.includes(e)) continue;
       const { x, y } = bullet.s;
-      shots.removeBullet(i);
-      if (e.kind === 'shielder' && shieldBlocks({ x, y }, e.s)) b.deflect(x, y);
-      else b.damageEnemy(e, x, y);
+      const { damage, homing, kind } = bullet;
+      // ракета заходит сбоку — щит её не держит; пробивающую пулю щит останавливает
+      const blocked = e.kind === 'shielder' && !homing && shieldBlocks({ x, y }, e.s);
+      // игла летит дальше; следующего врага заденет со следующего кадра — список врагов сейчас поменяется
+      if (bullet.pierce > 0 && !blocked) {
+        bullet.pierce--;
+        bullet.hit.push(e);
+      } else shots.removeBullet(i);
+      if (blocked) b.deflect(x, y);
+      else b.damageEnemy(e, x, y, damage, kind);
       break;
     }
   }
@@ -54,6 +66,8 @@ export function collide(b: Battle) {
     shots.removeBullet(i);
     shots.destroyMissile(j);
   }
+
+  beamHits(b);
 
   if (!b.field.alive) return;
   const pos = player.view;
@@ -80,7 +94,7 @@ export function collide(b: Battle) {
     // таран (босс от тарана не погибает)
     for (const e of enemies.list) {
       if (near(e.s, pos, e.r * 0.8 + PLAYER.r)) {
-        if (e.kind !== 'mother') b.destroyEnemy(e, false);
+        if (e.kind !== 'mother') b.destroyEnemy(e, null);
         b.damagePlayer(e.kind);
         return;
       }
@@ -99,5 +113,29 @@ export function collide(b: Battle) {
   // бонусы
   for (let i = pickups.powerUps.length - 1; i >= 0; i--) {
     if (near(pickups.powerUps[i].s, pos, PLAYER.pickupR)) b.pickPowerUp(i);
+  }
+}
+
+/** Луч лазера → всё на линии до щита щитоносца: урон раз в тик, ракеты босса сгорают сразу. */
+function beamHits(b: Battle) {
+  const { shots, enemies } = b;
+  const beam = shots.beam;
+  if (!beam) return;
+  const shielders = enemies.list.filter((e) => e.kind === 'shielder').map((e) => e.s);
+  beam.top = beamTop(beam.x, beam.bottom, shielders, beam.top);
+
+  for (let i = shots.missiles.length - 1; i >= 0; i--) {
+    if (inBeam(beam, shots.missiles[i].s, ENEMY.mother.homing.r)) shots.destroyMissile(i);
+  }
+
+  const damage = shots.beamDamage;
+  if (damage <= 0) return;
+  shots.beamDamage = 0;
+  // копия списка: сбитый сплиттер добавляет осколки, а их этот тик задеть не должен
+  for (const e of [...enemies.list]) {
+    if (!inBeam(beam, e.s, e.r)) continue;
+    const y = Math.min(beam.bottom, e.s.y + e.r);
+    if (e.kind === 'shielder' && shieldBlocks({ x: beam.x, y: beam.bottom }, e.s)) b.deflect(beam.x, beam.top);
+    else b.damageEnemy(e, beam.x, y, damage, 'laser');
   }
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import pkg from '../package.json' with { type: 'json' };
-import { snapshot, spawnEnemy, startGame } from './helpers';
+import { pickUp, snapshot, spawnEnemy, startGame } from './helpers';
 
 const API = 'http://api.test'; // адрес API задан в playwright.config.ts
 
@@ -56,4 +56,19 @@ test('сбит пулей — так и записано', async ({ page }) => {
   await startGame(page);
   await page.evaluate(() => window.__world!.crash('bullet'));
   await expect.poll(() => events.find((e) => e.type === 'run')?.cause).toBe('bullet');
+});
+
+test('в итоге партии — оружие: стартовое, в момент гибели и основное', async ({ page }) => {
+  const events = await mockEvents(page);
+  await startGame(page);
+  await pickUp(page, 'weapon', { weapon: 'laser' });
+  await page.evaluate(() => window.__world!.crash('bullet'));
+  await expect.poll(() => events.find((e) => e.type === 'run')).toBeTruthy();
+  // с пушкой летали дольше (стартовая неуязвимость), лазер — только в конце; уровень после попадания не ниже 1
+  expect(events.find((e) => e.type === 'run')).toMatchObject({
+    startWeapon: 'gun',
+    mainWeapon: 'gun',
+    weapon: 'laser',
+    weaponLevel: 1,
+  });
 });

@@ -10,8 +10,43 @@ describe('parseEvent', () => {
   });
 
   it('конец партии', () => {
-    const body = { type: 'run', device, version: '0.5.0', platform: 'web', score: 1200, wave: 4, seconds: 84, cause: 'kamikaze' };
+    const body = {
+      type: 'run',
+      device,
+      version: '0.6.0',
+      platform: 'web',
+      score: 1200,
+      wave: 4,
+      seconds: 84,
+      cause: 'kamikaze',
+      weapon: 'laser',
+      weaponLevel: 2,
+      startWeapon: 'gun',
+      mainWeapon: 'rocket',
+    };
     expect(parseEvent(body)).toEqual(body);
+  });
+
+  it('партия из старой игры, без оружия — оружие пустое', () => {
+    const body = { type: 'run', device, version: '0.5.0', platform: 'web', score: 1200, wave: 4, seconds: 84, cause: 'kamikaze' };
+    expect(parseEvent(body)).toEqual({ ...body, weapon: null, weaponLevel: null, startWeapon: null, mainWeapon: null });
+  });
+
+  it('оружие — либо всё годное, либо его нет', () => {
+    const ok = { type: 'run', device, score: 10, wave: 1, seconds: 30, cause: 'bullet' };
+    const weapon = { weapon: 'gun', weaponLevel: 1, startWeapon: 'gun', mainWeapon: 'gun' };
+    expect(parseEvent({ ...ok, ...weapon })).not.toBeNull();
+    for (const bad of [
+      { weapon: 'Laser' },
+      { weapon: undefined },
+      { weaponLevel: 0.5 },
+      { weaponLevel: 99 },
+      { weaponLevel: undefined },
+      { mainWeapon: "x'; DROP TABLE" },
+      { startWeapon: 5 },
+    ]) {
+      expect(parseEvent({ ...ok, ...weapon, ...bad }), JSON.stringify(bad)).toBeNull();
+    }
   });
 
   it('без версии и платформы — «?», длинные обрезаются', () => {

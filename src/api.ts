@@ -136,7 +136,22 @@ export async function sendErrorReport(report: ErrorReport): Promise<void> {
 /** Событие аналитики: запуск игры или конец партии (см. analytics.ts). */
 export type AnalyticsEvent =
   | { type: 'launch'; device: string; version: string; platform: string }
-  | { type: 'run'; device: string; version: string; platform: string; score: number; wave: number; seconds: number; cause: string };
+  | {
+      type: 'run';
+      device: string;
+      version: string;
+      platform: string;
+      score: number;
+      wave: number;
+      seconds: number;
+      cause: string;
+      /** Оружие в момент гибели: вид и уровень. */
+      weapon: string;
+      weaponLevel: number;
+      /** С чем вылетел из ангара и с чем провёл больше всего времени. */
+      startWeapon: string;
+      mainWeapon: string;
+    };
 
 /** Отправить событие аналитики. Без подписи: игра открывается и вне Telegram, а Telegram-id тут не нужен. */
 export async function sendEvent(event: AnalyticsEvent): Promise<void> {

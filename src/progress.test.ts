@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SKIN, QUESTS, UPGRADES } from './game/balance';
+import { DEFAULT_SKIN, DEFAULT_WEAPON, QUESTS, UPGRADES } from './game/balance';
 
 /** localStorage в памяти: в Node его нет, а progress.ts читает и пишет через него. */
 let store: Map<string, string>;
@@ -31,6 +31,7 @@ describe('migrate', () => {
       daily: { last: '', streak: 0 },
       quests: { active: [], done: {} },
       skins: { owned: [DEFAULT_SKIN], selected: DEFAULT_SKIN },
+      weapons: { owned: [DEFAULT_WEAPON], selected: DEFAULT_WEAPON },
     });
   });
 
@@ -67,11 +68,11 @@ describe('loadLocalProgress', () => {
     expect(loadLocalProgress().best).toBe(50);
   });
 
-  it('чистит мусор: отрицательные числа, уровни сверх максимума, чужие задания и некупленный скин', async () => {
+  it('чистит мусор: отрицательные числа, уровни сверх максимума, чужие задания, некупленные скин и оружие', async () => {
     store.set(
       'progress',
       JSON.stringify({
-        v: 5,
+        v: 6,
         best: -10,
         coins: 'много',
         upgrades: { fireRate: 99, magnet: 1.7 },
@@ -85,6 +86,7 @@ describe('loadLocalProgress', () => {
           done: { scout: 1, dragons: 3 },
         },
         skins: { owned: ['classic', 'delta'], selected: 'stealth' },
+        weapons: { owned: ['laser', 'laser'], selected: 'rocket' },
       }),
     );
     const { loadLocalProgress } = await load();
@@ -98,6 +100,7 @@ describe('loadLocalProgress', () => {
     expect(p.quests.active[0].progress).toBe(QUESTS.kinds.scout.target + QUESTS.kinds.scout.targetStep);
     expect(p.quests.done).toEqual({ scout: 1 });
     expect(p.skins).toEqual({ owned: ['classic', 'delta'], selected: 'classic' });
+    expect(p.weapons).toEqual({ owned: ['gun', 'laser'], selected: 'gun' }); // пушка есть всегда, ракеты не куплены
   });
 });
 
@@ -118,6 +121,7 @@ describe('saveProgress', () => {
         pets: ['дракон'],
         upgrades: { fireRate: 1, laser: 3 },
         skins: { owned: ['classic', 'ufo'], selected: 'ufo' },
+        weapons: { owned: ['gun', 'plasma'], selected: 'plasma' },
       }),
     );
     const { loadLocalProgress, saveProgress } = await load();
@@ -129,6 +133,7 @@ describe('saveProgress', () => {
       pets: ['дракон'],
       upgrades: { fireRate: 1, laser: 3 },
       skins: { owned: ['classic', 'ufo'] },
+      weapons: { owned: ['gun', 'plasma'], selected: 'gun' },
     });
   });
 

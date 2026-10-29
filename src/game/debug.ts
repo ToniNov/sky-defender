@@ -16,6 +16,11 @@ export interface DebugEnemy extends DebugObject {
   attack?: string;
 }
 
+export interface DebugPowerUp extends DebugObject {
+  /** У капсулы оружия — какой вид она даст сейчас. */
+  weapon?: string;
+}
+
 export interface DebugSnapshot {
   w: number;
   h: number;
@@ -29,19 +34,24 @@ export interface DebugSnapshot {
   skin: string;
   wave: number;
   lives: number;
-  weapon: number;
+  /** Оружие: вид (WeaponKind) и уровень. */
+  weapon: { kind: string; level: number };
   combo: number;
   invuln: number;
   shield: boolean;
   magnet: number;
   player: { x: number; y: number };
   enemies: DebugEnemy[];
-  powerUps: DebugObject[];
+  powerUps: DebugPowerUp[];
   coinsOnField: DebugObject[];
   missiles: DebugObject[];
   enemyBullets: number;
   /** Пуль игрока на поле. */
   playerBullets: number;
+  /** Где пули игрока: по ним видно узор залпа. */
+  playerBulletPositions: { x: number; y: number }[];
+  /** Луч лазера: середина x, полуширина half, от bottom (нос самолёта) вверх до top. null — выключен. */
+  beam: { x: number; half: number; top: number; bottom: number } | null;
 }
 
 export interface WorldDebug {
@@ -53,7 +63,11 @@ export interface WorldDebug {
   /** Выпустить одно построение из waves.ts. */
   spawnFormation(name: string): void;
   spawnEnemy(kind: string, x: number, y: number): void;
-  spawnPowerUp(kind: string, x: number, y: number): void;
+  /**
+   * Положить бонус. Для капсулы оружия ('weapon'): weapon — вид (по умолчанию текущий у игрока, то есть +1 уровень),
+   * cycles — менять вид в полёте, как в игре (по умолчанию нет, чтобы тест не зависел от момента подбора).
+   */
+  spawnPowerUp(kind: string, x: number, y: number, capsule?: { weapon?: string; cycles?: boolean }): void;
   spawnCoin(x: number, y: number): void;
   /** Самонаводящийся снаряд босса, летит вниз. */
   spawnMissile(x: number, y: number): void;
